@@ -47,6 +47,16 @@ def reduce(a, f_c, ppo):
         coords[0] = (coords[0] - f_c[0]) - ppo[0]
         coords[1] = (coords[1] - f_c[1]) - ppo[1]
 
+def reduce_fc(a, f_c):
+    for coords in a:
+        coords[0] = (coords[0] - f_c[0])
+        coords[1] = (coords[1] - f_c[1])
+
+def reduce_ppo(a, ppo):
+    for coords in a:
+        coords[0] = (coords[0] - ppo[0])
+        coords[1] = (coords[1] - ppo[1])
+
 def mm_to_m(a):
     for coords in a:
         coords[0] = coords[0] * 1E-3
@@ -56,7 +66,13 @@ def mm_to_m(a):
 def pixel_to_image(a, image_dim, pixel_spacing, fiducial_center, principal_point_offset):
     a = right_hand(a, image_dim)
     scale(a, pixel_spacing)
-    reduce(a, fiducial_center, principal_point_offset)
+    #print(a)
+    #reduce(a, fiducial_center, principal_point_offset)
+    #print(a)
+    reduce_fc(a, fiducial_center)
+    print(a)
+    reduce_ppo(a, principal_point_offset)
+    print(a)
     return a
 
 # part a: Fiducial mark measurement and refinement
@@ -101,33 +117,42 @@ line_2 = Line(m3_4, fiducial[2])
 
 #line_1.output()
 #line_2.output()
-
+#print(fiducial)
 fiducial_center = Line.intersection(line_1, line_2)
 
 print(f"Fiducial Center: {fiducial_center}")
 
 ppo = [-0.006, 0.006] # mm
 
+#reduce_fc(fiducial, fiducial_center)
+#print(fiducial)
+#reduce_ppo(fiducial, ppo)
+#print(fiducial)
 reduce(fiducial, fiducial_center, ppo)
 
 # part b: Flying height estimation
 
 cp = [
     [4544, 17489], # 300, px
-    [2547, 5778]   # 304, px
+    [4167, 13362], # 301, px
+    [3937, 3624],  # 303, px
+    [2547, 5778],  # 304, px
 ]
 
 rlg_cp = [
     [497.49, -46.90, 1090.56],   # 300, m
+    [258.21, -63.79, 1092.84],   # 301, m
+    [-311.55, -66.89, 1094.69],  # 303, m
     [-186.74, -151.54, 1093.12]  # 304, m
 ]
 
+print("HERE")
 cp = pixel_to_image(cp, image_dim, pixel_spacing, fiducial_center, ppo)
-
+print(cp)
 cfl = 153.358 # mm
 
-cp_dist = dist(cp[0], cp[1]) * 1E-3   # m
-rlg_dist = dist_3D(rlg_cp[0], rlg_cp[1]) # m 
+cp_dist = dist(cp[0], cp[2]) * 1E-3   # m
+rlg_dist = dist_3D(rlg_cp[0], rlg_cp[2]) # m 
 print(f"Image Distance {cp_dist}, Object Distance {rlg_dist}")
 
 S = rlg_dist / cp_dist
@@ -140,7 +165,7 @@ print(f"Flying Height: {flying_height}")
 
 ict = [
     [6148, 11608], # Top, px
-    [6346, 11557]  # Bottom, px
+    [6346, 11558]  # Bottom, px
 ]
 
 ict = pixel_to_image(ict, image_dim, pixel_spacing, fiducial_center, ppo)
@@ -148,6 +173,8 @@ ict = pixel_to_image(ict, image_dim, pixel_spacing, fiducial_center, ppo)
 rt = dist(ict[0], [0, 0])
 rb = dist(ict[1], [0, 0])
 
+print(f"rt: {rt}")
+print(f"rb: {rb}")
 h = ((flying_height * 1E3) * (rt - rb)) / rt # mm
 
 print(f"ICT Height: {h * 1E-3}")
