@@ -24,11 +24,6 @@ class Line:
         return [x, y]
 
 
-class Vector2:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
 def right_hand(a, image_dim):
     output = []
     for coords in a:
@@ -42,11 +37,6 @@ def scale(a, scale):
         coords[0] = scale * coords[0]
         coords[1] = scale * coords[1]
 
-def reduce(a, f_c, ppo):
-    for coords in a:
-        coords[0] = (coords[0] - f_c[0]) - ppo[0]
-        coords[1] = (coords[1] - f_c[1]) - ppo[1]
-
 def reduce_fc(a, f_c):
     for coords in a:
         coords[0] = (coords[0] - f_c[0])
@@ -57,26 +47,24 @@ def reduce_ppo(a, ppo):
         coords[0] = (coords[0] - ppo[0])
         coords[1] = (coords[1] - ppo[1])
 
-def mm_to_m(a):
-    for coords in a:
-        coords[0] = coords[0] * 1E-3
-        coords[1] = coords[0] * 1E-3
-
+def reduce(a, f_c, ppo):
+    reduce_fc(a, f_c)
+    print(f"reduced fc:\n{a}")
+    reduce_ppo(a, ppo)
+    print(f"reduced ppo:\n{a}")
 
 def pixel_to_image(a, image_dim, pixel_spacing, fiducial_center, principal_point_offset):
+    print(f"og:\n{a}")
     a = right_hand(a, image_dim)
+    print(f"right-handed:\n{a}")
     scale(a, pixel_spacing)
-    #print(a)
-    #reduce(a, fiducial_center, principal_point_offset)
-    #print(a)
-    reduce_fc(a, fiducial_center)
-    print(a)
-    reduce_ppo(a, principal_point_offset)
-    print(a)
+    print(f"scaled:\n{a}")
+    reduce(a, fiducial_center, principal_point_offset)
+
     return a
 
 # part a: Fiducial mark measurement and refinement
-
+print("\npart a:\n")
 cali_dists = [
     299.816,
     299.825,
@@ -98,16 +86,24 @@ fiducial_pixels = [
 image_dim = [20456, 20488]
 
 # calculate mm / px aka pixel spacing
+print("distances:")
 pixel_spacing = 0
 for i in range(4):
     cali_dist = cali_dists[i]
     it = i * 2
     pix_dist = dist(fiducial_pixels[it + 1], fiducial_pixels[it])
-    pixel_spacing += cali_dist / pix_dist
+    print(f"measured: {pix_dist}")
+    pixel_spacing_estimate = cali_dist / pix_dist
+    print(f"spacing: {pixel_spacing_estimate}")
+    pixel_spacing += pixel_spacing_estimate
 pixel_spacing = pixel_spacing / 4 # mm / px
 
+print(f"left-handed fiducial:\n{fiducial_pixels}")
+
 fiducial = right_hand(fiducial_pixels, image_dim)
+print(f"right-hand:\n{fiducial}")
 scale(fiducial, pixel_spacing)
+print(f"scaled:\n{fiducial}")
 
 m1_2 = slope(fiducial[1], fiducial[0])
 m3_4 = slope(fiducial[3], fiducial[2])
@@ -115,22 +111,20 @@ m3_4 = slope(fiducial[3], fiducial[2])
 line_1 = Line(m1_2, fiducial[0])
 line_2 = Line(m3_4, fiducial[2])
 
-#line_1.output()
-#line_2.output()
-#print(fiducial)
-fiducial_center = Line.intersection(line_1, line_2)
+print("Line 1:")
+line_1.output()
+print("Line 2:")
+line_2.output()
 
+fiducial_center = Line.intersection(line_1, line_2)
 print(f"Fiducial Center: {fiducial_center}")
 
 ppo = [-0.006, 0.006] # mm
 
-#reduce_fc(fiducial, fiducial_center)
-#print(fiducial)
-#reduce_ppo(fiducial, ppo)
-#print(fiducial)
 reduce(fiducial, fiducial_center, ppo)
 
 # part b: Flying height estimation
+print("\npart b:\n")
 
 cp = [
     [4544, 17489], # 300, px
@@ -146,13 +140,11 @@ rlg_cp = [
     [-186.74, -151.54, 1093.12]  # 304, m
 ]
 
-print("HERE")
 cp = pixel_to_image(cp, image_dim, pixel_spacing, fiducial_center, ppo)
-print(cp)
 cfl = 153.358 # mm
 
-cp_dist = dist(cp[0], cp[2]) * 1E-3   # m
-rlg_dist = dist_3D(rlg_cp[0], rlg_cp[2]) # m 
+cp_dist = dist(cp[0], cp[3]) * 1E-3   # m
+rlg_dist = dist_3D(rlg_cp[0], rlg_cp[3]) # m 
 print(f"Image Distance {cp_dist}, Object Distance {rlg_dist}")
 
 S = rlg_dist / cp_dist
@@ -162,6 +154,7 @@ flying_height = S * (cfl * 1E-3) # m
 print(f"Flying Height: {flying_height}")
 
 # part c: Building height estimation
+print("\npart c:\n")
 
 ict = [
     [6148, 11608], # Top, px
