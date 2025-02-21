@@ -136,6 +136,7 @@ data_28 = pool(og_28, image_dim_28)
 
 # part c
 
+# fiducial marks from certificate
 reseaux = [
     [-105.997, -105.995],
     [106.004, 106.008],
@@ -198,4 +199,67 @@ print(affine_transformation(test_data, test_data_reseaux))
 
 # part e
 
+ppo = [-0.006, 0.006] # mm
 
+k1 = -0.1528E-7
+k2 = 0.5256E-12
+k3 = 0
+
+p1 = 0.1346E-6
+p2 = 0.1224E-7
+
+f = 0.153358 # focal length (m)
+
+def principal_point_offest(a):
+    for coords in a:
+        coords[0] = (coords[0] - ppo[0])
+        coords[1] = (coords[1] - ppo[1])
+
+def radial_lens_correction(a):
+    for coords in a:
+        x, y = coords
+        r = math.sqrt(x**2 + y**2)
+        corr = ((k1 * r**2) + (k2 * r**4) + (k3 * r**6))
+        x_rad = x * corr
+        y_rad = y * corr
+
+        coords[0] = x + x_rad
+        coords[1] = y + y_rad
+
+def decentering_lens_correction(a):
+    for coords in a:
+        x, y = coords
+        r = math.sqrt(x**2 + y**2)
+        x_dec = p1 * (r**2 + 2 * x**2) + 2 * p2 * x * y
+        y_dec = p2 * (r**2 + 2 * y**2) + 2 * p1 * x * y
+
+        coords[0] = x + x_dec
+        coords[1] = y + y_dec
+
+# a = [], h = [], H = int
+def atmospheric_refraction_correction(a, h, H):
+    for coords in a:
+        K = ((2410 * H)/(H**2 - 6*H + 250)) - ((2410*h)/(h**2 - 6*h + 250)) * (h/H)
+        x, y = coords
+        r = math.sqrt(x**2 + y**2)
+        x_atm = x * K * (1 + (r**2/f**2))
+        y_atm = y * K * (1 + (r**2/f**2))
+
+object_coords = [
+    [-399.28, -679.72, 1090.96],
+    [109.70, -642.35, 1086.43],
+    [475.55, -538.18, 1090.50],
+    [517.62, -194.43, 1090.65],
+    [-466.39, -542.31, 1091.55],
+    [42.73, -412.19, 1090.82],
+    [321.09, -667.45, 1083.49],
+    [527.78, -375.72, 1092.00]
+]
+
+avg_h = 0
+for coords in object_coords:
+    x, y, z = coords
+    avg_h = avg_h + z
+avg_h = avg_h / len(object_coords)
+
+print(avg_h)
