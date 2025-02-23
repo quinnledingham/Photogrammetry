@@ -172,7 +172,7 @@ def get_affine_transformation_parameters(data, t_data, tag):
     r = np.array(r)
     print(f"RMS x: {RMS(r[:, 0])}, y: {RMS(r[:, 1])}")
 
-    array_to_word_table(r, f"residual_{tag}", float, decimals=4)
+    array_to_word_table(r, f"residual_{tag}", float, decimals=6)
 
     return x_hat
 
@@ -276,10 +276,11 @@ class Image:
         x, y = coords
         
         r = math.sqrt(x**2 + y**2)
+        dr = K * r * (1 + (r**2/self.camera.f**2))
         x_atm = -x * K * (1 + (r**2/self.camera.f**2))
         y_atm = -y * K * (1 + (r**2/self.camera.f**2))
 
-        self.atm_table.append([r, x_atm, y_atm])
+        self.atm_table.append([r, dr, x_atm, y_atm])
 
         return x_atm, y_atm
 
@@ -311,7 +312,10 @@ class Image:
 
                 x_rad, y_rad = self.radial_lens_correction(coords)
                 x_dec, y_dec = self.decentering_lens_correction(coords)
-                x_atm, y_atm = self.atmospheric_refraction_correction(coords, K)
+                if (key != "fiducials"):
+                    x_atm, y_atm = self.atmospheric_refraction_correction(coords, K)
+                else:
+                    x_atm, y_atm = 0, 0
 
                 rad_x, rad_y = pp_x + x_rad, pp_y + y_rad
                 dec_x, dec_y = rad_x + x_dec, rad_y + y_dec
@@ -323,7 +327,7 @@ class Image:
                 if (test_x != atm_x or test_y != atm_y):
                     print("PROBLEM HERE: adding corrections\n")
 
-                self.measurements.append([transformed_x, transformed_y, pp_x, pp_y, rad_x, rad_y, atm_x, atm_y])
+                self.measurements.append([transformed_x, transformed_y, pp_x, pp_y, rad_x, rad_y, dec_x, dec_y, atm_x, atm_y])
 
 doc = Document()
 df = pd.read_excel('data.xlsx')
@@ -351,10 +355,37 @@ images = [
     Image(camera, "image_28", 20462, 20494, og_28)
 ]
 
+
 # part b
 
 images[0].pool()
 images[1].pool()
+
+# get a value for pixel size
+
+def dist(a, b):
+    return math.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
+
+cali_dists = [
+    299.816,
+    299.825,
+    224.005,
+    224.006,
+] # mm
+
+# calculate mm / px aka pixel spacing
+print("distances:")
+pixel_spacing = 0
+for i in range(4):
+    cali_dist = cali_dists[i]
+    it = i * 2
+    pix_dist = dist(images[0].data['fiducials'][it + 1], images[0].data['fiducials'][it])
+    print(f"measured: {pix_dist}")
+    pixel_spacing_estimate = cali_dist / pix_dist
+    print(f"spacing: {pixel_spacing_estimate}")
+    pixel_spacing += pixel_spacing_estimate
+pixel_spacing = pixel_spacing / 4 # mm / px
+print(f"pixel_spacking: {pixel_spacing}")
 
 # part c
 
@@ -433,6 +464,7 @@ flying_height = 751.4637599031875 # flying height from Lab 1
 H = flying_height + avg_h
 
 print(avg_h)
+print(H)
 
 images[0].apply_corrections(avg_h, H)
 images[1].apply_corrections(avg_h, H)
@@ -453,10 +485,14 @@ for i in range(len(images[0].measurements)):
 
     final_table.append(new_row)
 
-print(images[0].measurements)
-#print(images[1].measurements)
-#print(final_table)
+print("\nimage 27")
+for v in images[0].measurements:
+    print(f"{v[8]}, {v[9]}")
+print("\nimage 28")
+for v in images[1].measurements:
+    print(f"{v[8]}, {v[9]}")
+
 array_to_word_table(final_table, f"measurements", float, decimals=3)
 
-doc.save("build/output.docx")
+doc.save("output.docx")
 

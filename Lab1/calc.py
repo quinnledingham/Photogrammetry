@@ -97,6 +97,7 @@ for i in range(4):
     print(f"spacing: {pixel_spacing_estimate}")
     pixel_spacing += pixel_spacing_estimate
 pixel_spacing = pixel_spacing / 4 # mm / px
+print(f"pixel_spacking: {pixel_spacing}")
 
 print(f"left-handed fiducial:\n{fiducial_pixels}")
 
@@ -143,12 +144,14 @@ rlg_cp = [
 cp = pixel_to_image(cp, image_dim, pixel_spacing, fiducial_center, ppo)
 cfl = 153.358 # mm
 
-cp_dist = dist(cp[0], cp[3]) * 1E-3   # m
-rlg_dist = dist_3D(rlg_cp[0], rlg_cp[3]) # m 
+cp_dist = dist(cp[0], cp[2]) * 1E-3   # m
+rlg_dist = dist_3D(rlg_cp[0], rlg_cp[2]) # m 
 print(f"Image Distance {cp_dist}, Object Distance {rlg_dist}")
 
 S = rlg_dist / cp_dist
 print(f"Scale: {S}")
+
+print(f"CFL: {cfl * 1E-3}")
 
 flying_height = S * (cfl * 1E-3) # m
 print(f"Flying Height: {flying_height}")

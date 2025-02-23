@@ -13,7 +13,6 @@ K = K * 1E-6
 
 r = math.sqrt(x**2 + y**2)
 
-d_r = -K*(r + (r**3/f**2))
 d_d = K * (r/f)
 print(d_d)
 
@@ -27,7 +26,6 @@ print(r_prime)
 print("Solutions:")
 print((r_prime / r) * x)
 print((r_prime / r) * y)
-
 
 x_atm = -x * K * (1 + (r**2/f**2))
 y_atm = -y * K * (1 + (r**2/f**2))
