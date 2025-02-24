@@ -180,6 +180,7 @@ class Camera:
     def __init__(self):
         self.ppo = [-0.006, 0.006] # mm
 
+        self.k0 = 0.8878e-4
         self.k1 = -0.1528e-7
         self.k2 = 0.5256e-12
         self.k3 = 0
@@ -252,7 +253,8 @@ class Image:
         x, y = coords
 
         r = math.sqrt(x**2 + y**2)
-        dr = ((self.camera.k1 * r**3) + (self.camera.k2 * r**5) + (self.camera.k3 * r**7))
+        # balanced
+        dr = ((self.camera.k0 * r) + (self.camera.k1 * r**3) + (self.camera.k2 * r**5) + (self.camera.k3 * r**7))
         x_rad = -x * (dr / r)
         y_rad = -y * (dr / r)
 
@@ -326,6 +328,8 @@ class Image:
 
                 if (test_x != atm_x or test_y != atm_y):
                     print("PROBLEM HERE: adding corrections\n")
+
+                print(f"TEST: {test_x - pp_x, test_y - pp_y}")
 
                 self.measurements.append([transformed_x, transformed_y, pp_x, pp_y, rad_x, rad_y, dec_x, dec_y, atm_x, atm_y])
 
