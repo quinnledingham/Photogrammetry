@@ -34,11 +34,12 @@ def load_data(data, low, high):
 
 def right_hand(a, image_dim):
     for coords in a:
-        x = coords[0] - (image_dim[0]/2)
-        y = (image_dim[1]/2) - coords[1]
+        x, y = coords
+        #x = coords[0] - (image_dim[0]/2)
+        #y = (image_dim[1]/2) - coords[1]
 
         coords[0] = x
-        coords[1] = y
+        coords[1] = -y
 
 
 def mean(a):
@@ -107,12 +108,12 @@ def residual_plot(og, residuals):
     print("\n\nPlot")
 
     og = np.array(og)
-    r = np.array(r)
+    r = np.array(residuals)
 
     plt.figure(figsize=(8, 6))
 
     for i in range(len(og)):
-        plt.arrow(og[i, 0], og[i, 1], r[i, 0], r[i, 1], head_width=2.5, head_length=5.5, color='red')
+        plt.arrow(og[i, 0], og[i, 1], 1000 * r[i, 0], 1000 * r[i, 1], color='red', head_width=1)
 
     plt.xlabel("x (mm)")
     plt.ylabel("y (mm)")
@@ -167,7 +168,7 @@ def get_affine_transformation_parameters(data, t_data, tag):
             r.append(coord)
             r_3d.append([coord])
 
-    #residual_plot(t_data, residuals)
+    residual_plot(t_data, r)
 
     r = np.array(r)
     print(f"RMS x: {RMS(r[:, 0])}, y: {RMS(r[:, 1])}")

@@ -33,4 +33,19 @@ y_atm = -y * K * (1 + (r**2/f**2))
 print(x_atm)
 print(y_atm)
 print(x + x_atm)
+
 print(y + y_atm)
+
+print("\n\nPlot")
+
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(8, 6))
+
+plt.arrow(1, 1, 2, 0, color='red')
+
+plt.xlabel("x (mm)")
+plt.ylabel("y (mm)")
+#plt.axhline(y=0, color='black', linewidth=0.7, linestyle='--')
+plt.legend()
+plt.show()
