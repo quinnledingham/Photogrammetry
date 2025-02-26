@@ -38,16 +38,16 @@ def evaluate(eq, baseline, parameters, left, right):
 
     new_eq = new_eq.subs(f, focal_length)
 
+    new_eq = new_eq.subs(l1, left[0])
+    new_eq = new_eq.subs(l2, left[1])
+    new_eq = new_eq.subs(r1, right[0])
+    new_eq = new_eq.subs(r2, right[1])
+
     new_eq = new_eq.subs(by, parameters[0])
     new_eq = new_eq.subs(bz, parameters[1])
     new_eq = new_eq.subs(omega, parameters[2])
     new_eq = new_eq.subs(phi, parameters[3])
     new_eq = new_eq.subs(kappa, parameters[4])
-
-    new_eq = new_eq.subs(l1, left[0])
-    new_eq = new_eq.subs(l2, left[1])
-    new_eq = new_eq.subs(r1, right[0])
-    new_eq = new_eq.subs(r2, right[1])
 
     return new_eq.evalf()
 
@@ -82,8 +82,6 @@ def relative_orientation(left, right, baseline):
         if type(parameters) is not list:
             parameters = np.array(parameters).ravel()
 
-        print(delta)
-
         for i in range(len(left)):
             A_row = []
             for p in partial_derivatives:
@@ -94,7 +92,8 @@ def relative_orientation(left, right, baseline):
             misclosure_vector.append(evaluate(delta, baseline, parameters, left[i], right[i]))
 
         A = np.matrix(A).astype(np.float64)
-        corrections = -np.linalg.inv(A.transpose() @ A) @ A.transpose() @  np.array(misclosure_vector).astype(np.float64)
+
+        corrections = -np.linalg.inv(A.T @ A) @ A.T @ np.array(misclosure_vector).astype(np.float64)
         print(misclosure_vector)
         parameters = parameters + corrections
         iterations = iterations + 1
