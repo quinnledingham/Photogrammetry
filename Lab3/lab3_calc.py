@@ -69,12 +69,12 @@ def evaluate(eq, baseline, parameters, left, right):
         kappa: parameters[4]
     })
     
-    return float(N(new_eq))
+    return float(N(new_eq, 50))
 
 def relative_orientation(left, right, baseline):
     parameters = np.array([0, 0, 0, 0, 0]) # by, bz, omega, phi, kappa
 
-    transformation_M = rotation_matrix_3d(2, kappa) * rotation_matrix_3d(1, phi) * rotation_matrix_3d(0, omega)
+    transformation_M = rotation_matrix_3d(2, kappa) * (rotation_matrix_3d(1, phi) * rotation_matrix_3d(0, omega))
 
     print("transformation matrix:")
     pprint(transformation_M)
