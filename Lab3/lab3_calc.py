@@ -6,8 +6,8 @@ import math
 # Notes:
 # 1 pixel for Y-Parallax
 
-#focal_length = 158.358 # mm
-focal_length = 152.150 # mm
+focal_length = 158.358 # mm
+#focal_length = 152.150 # mm
 
 # create equations
 bx, by, bz, omega, phi, kappa, l1, l2, r1, r2, f= symbols('bx by bz phi kappa omega l1 l2 r1 r2 f')
@@ -182,6 +182,27 @@ def space_intersection(left, right, baseline, parameters):
 
 base_distance = 92.0 # mm
 
+left = [
+    [-10.105,  15.011],
+    [94.369,   -4.092],
+    [-10.762, -104.711],
+    [90.075,  -91.378],
+    [-9.489,   96.26],
+    [85.42,   103.371],
+]
+
+right = [
+    [-103.829,	16.042],
+    [0.868,     -0.022],
+    [-100.169,	-103.14],
+    [-1.607,	-87.253],
+    [-105.395,	98.706],
+    [-9.738,	109.306],
+]
+
+parameters = relative_orientation(left, right, base_distance)
+space_intersection(left, right, base_distance, parameters)
+
 # Verification
 
 test_data_left = [
@@ -202,7 +223,7 @@ test_data_right = [
     [8.492, -68.873]   # 50
 ]
 
-p_parameters = relative_orientation(test_data_left, test_data_right, base_distance)
+#p_parameters = relative_orientation(test_data_left, test_data_right, base_distance)
 #print(p_parameters)
-target_parameters = [5.0455, 2.1725, math.radians(0.4392),  math.radians(1.508), math.radians(3.1575)]
-space_intersection(test_data_left, test_data_right, base_distance, p_parameters)
+#target_parameters = [5.0455, 2.1725, math.radians(0.4392),  math.radians(1.508), math.radians(3.1575)]
+#space_intersection(test_data_left, test_data_right, base_distance, p_parameters)
