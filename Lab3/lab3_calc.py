@@ -2,12 +2,12 @@ from sympy import *
 import numpy as np
 import copy
 import math
+import pandas as pd
+
+from docx import Document
 
 # Notes:
 # 1 pixel for Y-Parallax
-
-focal_length = 158.358 # mm
-#focal_length = 152.150 # mm
 
 # create equations
 bx, by, bz, omega, phi, kappa, l1, l2, r1, r2, f= symbols('bx by bz phi kappa omega l1 l2 r1 r2 f')
@@ -124,7 +124,7 @@ def relative_orientation(left, right, baseline):
     return parameters
 
 def space_intersection_point(left, right, base):
-    d_i = N(lambda_i.subs({
+    l_i = N(lambda_i.subs({
         bx: base[0],
         bz: base[2],
         f: focal_length,
@@ -142,19 +142,22 @@ def space_intersection_point(left, right, base):
         rz: right[2]
     }))
 
-    new_lx = d_i * left[0]
-    new_ly = d_i * left[1]
-    new_lz = -d_i * focal_length
+    new_lx =  l_i * left[0]
+    new_ly =  l_i * left[1]
+    new_lz = -l_i * focal_length
 
     new_rx = m_i * right[0] + base[0]
     new_ry = m_i * right[1] + base[1]
     new_rz = m_i * right[2] + base[2]
 
+    # Calculating Y_Parallax
     y_parallax = new_ry - new_ly
     print(f"Y_PARALLAX: { y_parallax }")
+
     if not math.isclose(new_lx, new_rx): print(f"XmL ({new_lx}) != XmR ({new_rx})")
     mean_y = (new_ly + new_ry) / 2
     if not math.isclose(new_lz, new_rz): print(f"ZmL ({new_lz}) != ZmR ({new_rz})")
+
     return [new_lx, mean_y, new_lz]
 
 def space_intersection(left, right, baseline, parameters):
@@ -180,30 +183,49 @@ def space_intersection(left, right, baseline, parameters):
 
     print(model_coordinates)
 
+doc = Document()
+
 base_distance = 92.0 # mm
+focal_length = 158.358 # mm
 
-left = [
-    [-10.105,  15.011],
-    [94.369,   -4.092],
-    [-10.762, -104.711],
-    [90.075,  -91.378],
-    [-9.489,   96.26],
-    [85.42,   103.371],
-]
+class Data:
+    def __init__(self):
+        self.control = []
+        self.tie = []
+        self.index_map = {}
 
-right = [
-    [-103.829,	16.042],
-    [0.868,     -0.022],
-    [-100.169,	-103.14],
-    [-1.607,	-87.253],
-    [-105.395,	98.706],
-    [-9.738,	109.306],
-]
+df = pd.read_excel('data.xlsx')
 
-parameters = relative_orientation(left, right, base_distance)
-space_intersection(left, right, base_distance, parameters)
+# Define control point IDs
+control_points = {100, 102, 104, 105, 200, 201, 202, 203}
+
+image_27 = Data()
+image_28 = Data()
+
+for index, row in df.iterrows():
+    point_id, x27, y27, x28, y28 = row.to_list()
+
+    if isinstance(point_id, int) and point_id in control_points:
+        # It's a control point
+        image_27.index_map[point_id] = len(image_27.control)
+        image_28.index_map[point_id] = len(image_28.control)
+
+        image_27.control.append((x27, y27))
+        image_28.control.append((x28, y28))
+    elif isinstance(point_id, str) and point_id.startswith("T"):
+        # It's a tie point
+        image_27.index_map[point_id] = len(image_27.tie)
+        image_28.index_map[point_id] = len(image_28.tie)
+
+        image_27.tie.append((x27, y27))
+        image_28.tie.append((x28, y28))
+
+parameters = relative_orientation(image_27.tie, image_28.tie, base_distance)
+space_intersection(image_27.tie, image_28.tie, base_distance, parameters)
+space_intersection(image_27.control, image_28.control, base_distance, parameters)
 
 # Verification
+focal_length = 152.150 # mm
 
 test_data_left = [
     [106.399, 90.426], # 30
@@ -223,7 +245,7 @@ test_data_right = [
     [8.492, -68.873]   # 50
 ]
 
-#p_parameters = relative_orientation(test_data_left, test_data_right, base_distance)
+p_parameters = relative_orientation(test_data_left, test_data_right, base_distance)
 #print(p_parameters)
-#target_parameters = [5.0455, 2.1725, math.radians(0.4392),  math.radians(1.508), math.radians(3.1575)]
-#space_intersection(test_data_left, test_data_right, base_distance, p_parameters)
+target_parameters = [5.0455, 2.1725, math.radians(0.4392),  math.radians(1.508), math.radians(3.1575)]
+space_intersection(test_data_left, test_data_right, base_distance, p_parameters)

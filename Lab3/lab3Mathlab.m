@@ -25,17 +25,21 @@ kappa = 0; % Initial rotation angle kappa
 figure;
 subplot(1, 2, 1);
 plot(tie_points(:,1), tie_points(:,2), 'ro');
-title('Left Image Tie Points');
+title('Image 27 Tie Points');
 xlabel('x_L (mm)');
 ylabel('y_L (mm)');
 grid on;
+axis([-125 125 -125 125]); % Set axis limits
 
 subplot(1, 2, 2);
 plot(tie_points(:,3), tie_points(:,4), 'bo');
-title('Right Image Tie Points');
+title('Image 28 Tie Points');
 xlabel('x_R (mm)');
 ylabel('y_R (mm)');
 grid on;
+axis([-125 125 -125 125]); % Set axis limits
+
+return;
 syms xL yL xR yR bY bZ omega phi kappa real
 
 % Define image vectors
