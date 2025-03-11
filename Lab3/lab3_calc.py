@@ -3,6 +3,7 @@ import numpy as np
 import copy
 import math
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from docx import Document
 
@@ -57,6 +58,9 @@ partial_derivatives.append(diff(mis_det, kappa))
 rx, ry, rz, lx, ly, lz = symbols('rx ry rz lx ly lz')
 lambda_i = (bx*rz-bz*rx) / (lx*rz+f*rx)
 mu_i = (-bx*f-bz*lx) / (lx*rz+f*rx)
+
+# from last lab
+pixel_spacing = 0.011901151249225804
 
 def evaluate(eq, baseline, parameters, left, right):
     new_eq = eq.subs({
@@ -187,6 +191,7 @@ def space_intersection(left, right, baseline, parameters):
     array_to_word_table([y_parallaxs], "Y Parallax", float, decimals=4)
 
     print(f"Y Parallaxs {y_parallaxs}")
+    print(f"Pixel Y Parallaxs {np.array(y_parallaxs) * (1/pixel_spacing)}")
     print(f"Model Coordinates {model_coordinates}")
     return model_coordinates
 
@@ -198,6 +203,39 @@ def array_to_word_table(array, name, value_type, decimals=2):
     for i, row in enumerate(array):
         for j, cell in enumerate(row):
             table.cell(i, j).text = str(round(cell, decimals))
+
+def plot_points(left, right):
+    left = np.array(left)
+    right = np.array(right)
+
+    plt.figure(figsize=(10, 5))
+
+    # Subplot for Image 27
+    plt.subplot(1, 2, 1)
+    plt.plot(left[:, 0], left[:, 1], 'ro')
+    plt.title('Image 27 Tie Points')
+    plt.xlabel('x_L (mm)')
+    plt.ylabel('y_L (mm)')
+    plt.grid(True)
+    plt.axis([-125, 125, -125, 125])
+
+    # Subplot for Image 28
+    plt.subplot(1, 2, 2)
+    plt.plot(right[:, 0], right[:, 1], 'bo')
+    plt.title('Image 28 Tie Points')
+    plt.xlabel('x_R (mm)')
+    plt.ylabel('y_R (mm)')
+    plt.grid(True)
+    plt.axis([-125, 125, -125, 125])
+
+    plt.tight_layout()
+    plt.show()
+
+def convert_rotation_parameters(p):
+    p[2] = p[2] * 180 / math.pi
+    p[3] = p[3] * 180 / math.pi
+    p[4] = p[4] * 180 / math.pi
+    return p
 
 doc = Document()
 
@@ -247,9 +285,11 @@ for index, row in df.iterrows():
         image_27.tie.append((x27, y27))
         image_28.tie.append((x28, y28))
 
+#plot_points(image_27.tie, image_28.tie)
+
 print("\n\nLab Data\n")
 parameters = relative_orientation(image_27.tie, image_28.tie, base_distance)
-array_to_word_table([parameters], "Parameters", float, decimals=4)
+array_to_word_table([convert_rotation_parameters(parameters)], "Parameters", float, decimals=4)
 
 tie_points = space_intersection(image_27.tie, image_28.tie, base_distance, parameters)
 array_to_word_table(tie_points, "Tie Points", float, decimals=4)
@@ -280,9 +320,11 @@ test_data_right = [
     [8.492, -68.873]   # 50
 ]
 
-# 
+#plot_points(test_data_left, test_data_right)
+
+# test data parameters
 test_parameters = relative_orientation(test_data_left, test_data_right, base_distance)
-array_to_word_table([test_parameters], "Test Parameters", float, decimals=4)
+array_to_word_table([convert_rotation_parameters(test_parameters)], "Test Parameters", float, decimals=4)
 
 # used to test if the space intersection is working
 target_parameters = [5.0455, 2.1725, math.radians(0.4392),  math.radians(1.508), math.radians(3.1575)]
