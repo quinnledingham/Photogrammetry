@@ -150,7 +150,6 @@ def absolute_orientation(model_coordinates, object_coordinates):
             break
 
 model_coordinates = [
-
     [108.9302,  92.5787, -155.7696], # 30
     [ 19.5304,  96.0258, -156.4878], # 40
     [ 71.8751,   4.9657, -154.1035], # 72
