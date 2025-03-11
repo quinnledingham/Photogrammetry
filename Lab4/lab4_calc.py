@@ -106,6 +106,8 @@ def inital_approx(o1, o2, m1, m2):
 
     kappao = ao - am
     
+    Mo = r3(float(kappao))
+
     delta_xo = o2[0] - o1[0]
     delta_yo = o2[1] - o1[1]
     delta_zo = o2[2] - o1[2]
@@ -114,14 +116,13 @@ def inital_approx(o1, o2, m1, m2):
     delta_ym = m2[1] - m1[1]
     delta_zm = m2[2] - m1[2]
 
-    Mo = r3(float(kappao))
-
     do = math.sqrt(delta_xo**2 + delta_yo**2 + delta_zo**2)
     dm = math.sqrt(delta_xm**2 + delta_ym**2 + delta_zm**2)
 
     lambdao = do / dm
 
     to = o1.T - (lambdao * (Mo @ o2.T))
+
     parameters = np.array([0.0, 0.0, kappao, lambdao, to[0], to[1], to[2]]) # omega, phi, kappa, lambda, tx, ty, tz
     print(f"Initial parameters: {parameters}")
     return parameters
@@ -134,13 +135,11 @@ def deg_parameters(p):
 
 
 def absolute_orientation(model_coordinates, object_coordinates):
-    #parameters = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]) # omega, phi, kappa, lambda, tx, ty, tz
     parameters = inital_approx(np.array(object_coordinates[0]), np.array(object_coordinates[1]), np.array(model_coordinates[0]), np.array(model_coordinates[1]))
 
     while(1):
         A, misclosure_vector = design_matrix(parameters, model_coordinates, object_coordinates)
-        #print(A)
-        print(f"w: {misclosure_vector}")
+
         corrections = -(np.linalg.inv(A.T @ A) @ A.T @ np.array(misclosure_vector))
         parameters = parameters + np.array(corrections).ravel()
 
@@ -170,9 +169,5 @@ object_coordinates = [
 ]
 
 test_data = Absolute_Data(model_coordinates, object_coordinates)
-
-#parameters = [0, 0, 0, 0, 0, 0, 0]
-#A, w = design_matrix(parameters, model_coordinates, object_coordinates)
-#print(w)
 
 absolute_orientation(model_coordinates, object_coordinates)
