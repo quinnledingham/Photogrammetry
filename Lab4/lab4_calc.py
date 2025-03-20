@@ -30,39 +30,24 @@ rotation_matrix = Matrix([
     [m31, m32, m33],
 ])
 
-O = b_lambda * rotation_matrix * Matrix([mx, my, mz]) + Matrix([tx, ty, tz])
-xO = O[0]
-yO = O[1]
-zO = O[2]
+class Absolute_Orientation:
+    # absolute orientation equations
+    O = b_lambda * rotation_matrix * Matrix([mx, my, mz]) + Matrix([tx, ty, tz])
+    xO, yO, zO = O
 
-partial_derivatives = []
-for o in O:
-    row = []
-    row.append(diff(o, b_omega))
-    row.append(diff(o, b_phi))
-    row.append(diff(o, b_kappa))
-    row.append(diff(o, b_lambda))
-    row.append(diff(o, tx))
-    row.append(diff(o, ty))
-    row.append(diff(o, tz))
-    partial_derivatives.append(row)
+    partial_derivatives = []
+    for o in O:
+        row = []
+        row.append(diff(o, b_omega))
+        row.append(diff(o, b_phi))
+        row.append(diff(o, b_kappa))
+        row.append(diff(o, b_lambda))
+        row.append(diff(o, tx))
+        row.append(diff(o, ty))
+        row.append(diff(o, tz))
+        partial_derivatives.append(row)
 
-pprint(partial_derivatives[0][0])
-
-def rad_parameters(p):
-    dx = p[0] * math.pi / 180
-    dy = p[1] * math.pi / 180
-    dz = p[2] * math.pi / 180
-    return [dx, dy, dz]
-
-def deg_parameters(p):
-    dx = p[0] * 180 / math.pi
-    dy = p[1] * 180 / math.pi
-    dz = p[2] * 180 / math.pi
-    return [dx, dy, dz]
-
-class Absolute_Data:
-    def __init__(self, model, object):
+    def __init__(self, model, object, right_pc):
         self.model = model
         self.object = object
 
@@ -74,63 +59,7 @@ class Absolute_Data:
         self.get_ground_coordinates()
         print(self.transformed_points)
 
-        print(self.extract_angles([0.4392, 1.508, 3.1575], self.parameters))
-
-    # points [x, y, z]
-    def design_matrix(self):
-        A = []
-        misclosure_vector = []
-        for point_index in range(len(self.model)):
-            for coord_index in range(3):
-                A_row = []
-                
-                for p in partial_derivatives[coord_index]:
-                    value = self.evaluate(p, self.model[point_index])
-                    A_row.append(value)
-
-                A.append(A_row)
-            misclosure_vector += self.misclosure(self.model[point_index], self.object[point_index])
-        return np.matrix(A), misclosure_vector
-
-    # does the LSE to get parameters for absolute orientation
-    def estimate_parameters(self):
-        iterations = 0
-        while(1):
-            A, misclosure_vector = self.design_matrix()
-
-            corrections = -(np.linalg.inv(A.T @ A) @ A.T @ np.array(misclosure_vector))
-            self.parameters = self.parameters + np.array(corrections).ravel()
-
-            rel_corrections = np.abs(corrections / (np.abs(self.parameters) + 1e-10))
-            iterations += 1
-            if np.max(rel_corrections) < 1e-3:
-                print(f"Iterations: {iterations}")
-                A, misclosure_vector = self.design_matrix()
-                break
-
-    def evaluate(self, eq, point):
-        new_eq = eq.subs({
-            b_omega: self.parameters[0],
-            b_phi: self.parameters[1], 
-            b_kappa: self.parameters[2], 
-            b_lambda: self.parameters[3], 
-            tx: self.parameters[4], 
-            ty: self.parameters[5], 
-            tz: self.parameters[6],
-            mx: point[0],
-            my: point[1],
-            mz: point[2]
-        })
-        
-        return float(N(new_eq, 50))
-
-    def misclosure(self, model_coord, object_coord):
-        w = [
-            self.evaluate(xO, model_coord) - object_coord[0],
-            self.evaluate(yO, model_coord) - object_coord[1],
-            self.evaluate(zO, model_coord) - object_coord[2]
-        ]
-        return w
+        print(self.extract_angles(right_pc, self.parameters))
 
     def inital_approx(self, o1, o2, m1, m2):
         ao = atan((o2[0] - o1[0])/(o2[1] - o1[1]))
@@ -161,10 +90,67 @@ class Absolute_Data:
         self.parameters = np.array([0.0, 0.0, kappao, lambdao, to[0], to[1], to[2]]) # omega, phi, kappa, lambda, tx, ty, tz
         print(f"Initial parameters: {self.parameters}")
 
+    # points [x, y, z]
+    def design_matrix(self):
+        A = []
+        misclosure_vector = []
+        for point_index in range(len(self.model)):
+            for coord_index in range(3):
+                A_row = []
+                
+                for p in self.partial_derivatives[coord_index]:
+                    value = self.evaluate(p, self.model[point_index])
+                    A_row.append(value)
+
+                A.append(A_row)
+            misclosure_vector += self.misclosure(self.model[point_index], self.object[point_index])
+        return np.matrix(A), misclosure_vector
+
+    # does the LSE to get parameters for absolute orientation
+    def estimate_parameters(self):
+        iterations = 0
+        while(1):
+            A, misclosure_vector = self.design_matrix()
+
+            corrections = -(np.linalg.inv(A.T @ A) @ A.T @ np.array(misclosure_vector))
+            self.parameters = self.parameters + np.array(corrections).ravel()
+
+            rel_corrections = np.abs(corrections / (np.abs(self.parameters) + 1e-10))
+            iterations += 1
+            if np.max(rel_corrections) < 1e-3:
+                print(f"Iterations: {iterations}")
+                A, misclosure_vector = self.design_matrix()
+                print(f"Residuals: {misclosure_vector}")
+                break
+
+    def evaluate(self, eq, point):
+        new_eq = eq.subs({
+            b_omega: self.parameters[0],
+            b_phi: self.parameters[1], 
+            b_kappa: self.parameters[2], 
+            b_lambda: self.parameters[3], 
+            tx: self.parameters[4], 
+            ty: self.parameters[5], 
+            tz: self.parameters[6],
+            mx: point[0],
+            my: point[1],
+            mz: point[2]
+        })
+        
+        return float(N(new_eq, 50))
+
+    def misclosure(self, model_coord, object_coord):
+        w = [
+            self.evaluate(self.xO, model_coord) - object_coord[0],
+            self.evaluate(self.yO, model_coord) - object_coord[1],
+            self.evaluate(self.zO, model_coord) - object_coord[2]
+        ]
+        return w
+
     def get_ground(self, coord):
-        x = self.evaluate(xO, coord)
-        y = self.evaluate(yO, coord)
-        z = self.evaluate(zO, coord)
+        x = self.evaluate(self.xO, coord)
+        y = self.evaluate(self.yO, coord)
+        z = self.evaluate(self.zO, coord)
         return [x, y, z]
 
     def get_ground_coordinates(self):
@@ -187,6 +173,12 @@ class Absolute_Data:
         self.deg_parameters[1] *= 180 / math.pi
         self.deg_parameters[2] *= 180 / math.pi
 
+    def get_rad_parameters(self, p):
+        dx = p[0] * math.pi / 180
+        dy = p[1] * math.pi / 180
+        dz = p[2] * math.pi / 180
+        return [dx, dy, dz]
+
     def get_angle(self, M):
         print(M)
         omega = np.degrees(np.arctan2(-M[2, 1], M[2, 2]))
@@ -197,8 +189,8 @@ class Absolute_Data:
     # extract angles from the relative parameters and the absolutae parmeters
     # the angles for going from image to object space
     def extract_angles(self, rel_p, abs_p):
-        M_i_m_left = self.evaluate_rotation(rad_parameters([0, 0, 0]))
-        M_i_m_right = self.evaluate_rotation(rad_parameters(rel_p)) # relative orientation rotation parameters
+        M_i_m_left = self.evaluate_rotation(self.get_rad_parameters([0, 0, 0]))
+        M_i_m_right = self.evaluate_rotation(self.get_rad_parameters(rel_p)) # relative orientation rotation parameters
         M_o_m = self.evaluate_rotation(abs_p)
         M_i_o_left = M_i_m_left * M_o_m.T
         M_i_o_right = M_i_m_right * M_o_m.T
@@ -208,28 +200,74 @@ class Absolute_Data:
         angles.append(self.get_angle(np.array(M_i_o_right).astype(np.float64)))
         return angles
 
-model_coordinates = [
-    [108.9302,  92.5787, -155.7696], # 30
-    [ 19.5304,  96.0258, -156.4878], # 40
-    [ 71.8751,   4.9657, -154.1035], # 72
-    [ -0.9473,  -7.4078, -154.8060], # 127
-    [  9.6380, -96.5329, -158.0535], # 112
-    [100.4898, -63.9177, -154.9389], # 50
-]
+def main():
 
-object_coordinates = [
-    [7350.27,	4382.54,	276.42], # 30
-    [6717.22,	4626.41,	280.05], # 40
-    [6869.09,	3844.56,	283.11], # 72
-    [6316.06,	3934.63,	283.03], # 127
-    [6172.84,	3269.45,	248.10], # 112
-    [6905.26,	3279.84,	266.47], # 50
-]
+    # lab data
+    print("\n\nLab Data\n")
 
-test_data = Absolute_Data(model_coordinates, object_coordinates)
+    object_coords = np.array([
+        [-399.28, -679.72, 1090.96], # 100
+        [109.70, -642.35, 1086.43],  # 102
+        [475.55, -538.18, 1090.50],  # 104
+        [517.62, -194.43, 1090.65],  # 105
+        [-466.39, -542.31, 1091.55], # 200
+        [42.73, -412.19, 1090.82],   # 201
+        [321.09, -667.45, 1083.49],  # 202
+        [527.78, -375.72, 1092.00]   # 203
+    ])
 
-#test_parameters = absolute_orientation(model_coordinates, object_coordinates)
-#print(get_ground_coordinates(test_parameters, model_coordinates))
-print(test_data.get_ground([92, 5.0455, 2.1725]))
+    all_model_points = np.array([
+        [-9.5921, 96.2715, -158.3930],  # 100
+        [-2.3846, -5.9159, -156.4915],  # 102
+        [18.3668, -79.3166, -153.5411], # 104
+        [87.3462, -88.0244, -153.0441], # 105
+        [18.1668, 109.7020, -158.5132], # 200
+        [43.8732, 7.3538, -155.7842],   # 201
+        [-7.5412, -48.3543, -155.9639], # 202
+        [50.8805, -89.9778, -152.9167]  # 203
+    ])
 
-#print(extract_angles([0.4392, 1.508, 3.1575], test_parameters))
+    selected_indices = [0, 2, 3] # what indices are control points
+
+    control_points = all_model_points[selected_indices]
+    check_points = np.delete(all_model_points, selected_indices, axis=0)
+    control_object_coords = object_coords[selected_indices]
+
+    print(f"Control Points {control_points}")
+
+    lab_abs = Absolute_Orientation(control_points, control_object_coords, [-1.0032, 0.2585, -1.7538])
+
+    tie_points = np.array([
+        [-9.9688, 14.8164, -156.2243],    # T1
+        [92.0658, -4.0001, -154.4931],    # T2
+        [-10.5394, -102.5484, -155.0824], # T3
+        [87.0929, -88.3482, -153.1153],   # T4
+        [-9.4881, 96.2460, -158.3431],    # T5
+        [84.9816, 102.8444, -157.5453]    # T6
+    ])
+
+    # test data
+    print("\n\nTest Data\n")
+    model_coordinates = [
+        [108.9302,  92.5787, -155.7696], # 30
+        [ 19.5304,  96.0258, -156.4878], # 40
+        [ 71.8751,   4.9657, -154.1035], # 72
+        [ -0.9473,  -7.4078, -154.8060], # 127
+        [  9.6380, -96.5329, -158.0535], # 112
+        [100.4898, -63.9177, -154.9389], # 50
+    ]
+
+    object_coordinates = [
+        [7350.27,	4382.54,	276.42], # 30
+        [6717.22,	4626.41,	280.05], # 40
+        [6869.09,	3844.56,	283.11], # 72
+        [6316.06,	3934.63,	283.03], # 127
+        [6172.84,	3269.45,	248.10], # 112
+        [6905.26,	3279.84,	266.47], # 50
+    ]
+
+    test_data = Absolute_Orientation(model_coordinates, object_coordinates, [0.4392, 1.508, 3.1575])
+
+#print(test_data.get_ground([92, 5.0455, 2.1725]))
+if __name__ == "__main__":
+    main()

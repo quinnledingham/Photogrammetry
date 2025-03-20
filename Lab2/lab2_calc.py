@@ -168,7 +168,7 @@ def get_affine_transformation_parameters(data, t_data, tag):
             r.append(coord)
             r_3d.append([coord])
 
-    residual_plot(t_data, r)
+    #residual_plot(t_data, r)
 
     r = np.array(r)
     print(f"RMS x: {RMS(r[:, 0])}, y: {RMS(r[:, 1])}")
@@ -209,6 +209,7 @@ class Image:
         self.dim = [dim_x, dim_y]
         self.all_data = data
 
+    # combines all of the individual measurements
     def pool(self):
         self.data = {key: 0 for key in self.all_data.keys()}
 
@@ -300,6 +301,11 @@ class Image:
 
         self.measurements = []
 
+        self.final = []
+        self.fiducial = []
+        self.tie = []
+        self.control = []
+
         h = h * 1E-3 # km
         H = H * 1E-3 # km
         K = ((2410 * H)/(H**2 - 6*H + 250)) - ((2410*h)/(h**2 - 6*h + 250)) * (h/H)
@@ -330,174 +336,190 @@ class Image:
                 if (test_x != atm_x or test_y != atm_y):
                     print("PROBLEM HERE: adding corrections\n")
 
-                print(f"TEST: {test_x - pp_x, test_y - pp_y}")
+                #print(f"TEST: {test_x - pp_x, test_y - pp_y}")
 
                 self.measurements.append([transformed_x, transformed_y, pp_x, pp_y, rad_x, rad_y, dec_x, dec_y, atm_x, atm_y])
 
+                # split the different points into different lists
+                final_coords = [atm_x, atm_y]
+                self.final.append(final_coords)
+                if key == "fiducials":
+                    self.fiducial.append(final_coords)
+                elif key == "control":
+                    self.control.append(final_coords)
+                elif key == "tie":
+                    self.tie.append(final_coords)
+
 doc = Document()
-df = pd.read_excel('data.xlsx')
 
-data = []
-for index, row in df.iterrows():
-    data.append(row.to_list())
+def main():
+    df = pd.read_excel('data.xlsx')
 
-og_27 = {
-    "fiducials": load_data(data, 0, 8),
-    "control": load_data(data, 16, 24),
-    "tie": load_data(data, 32, 38),
-}
+    data = []
+    for index, row in df.iterrows():
+        data.append(row.to_list())
 
-og_28 = {
-    "fiducials": load_data(data, 8, 16),
-    "control": load_data(data, 24, 32),
-    "tie": load_data(data, 38, 44),
-}
+    og_27 = {
+        "fiducials": load_data(data, 0, 8),
+        "control": load_data(data, 16, 24),
+        "tie": load_data(data, 32, 38),
+    }
 
-camera = Camera()
+    og_28 = {
+        "fiducials": load_data(data, 8, 16),
+        "control": load_data(data, 24, 32),
+        "tie": load_data(data, 38, 44),
+    }
 
-images = [
-    Image(camera, "image_27", 20448, 20480, og_27),
-    Image(camera, "image_28", 20462, 20494, og_28)
-]
+    camera = Camera()
+
+    images = [
+        Image(camera, "image_27", 20448, 20480, og_27),
+        Image(camera, "image_28", 20462, 20494, og_28)
+    ]
 
 
-# part b
+    # part b
 
-images[0].pool()
-images[1].pool()
+    images[0].pool()
+    images[1].pool()
 
-# get a value for pixel size
+    # get a value for pixel size
 
-def dist(a, b):
-    return math.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
+    def dist(a, b):
+        return math.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
 
-cali_dists = [
-    299.816,
-    299.825,
-    224.005,
-    224.006,
-] # mm
+    cali_dists = [
+        299.816,
+        299.825,
+        224.005,
+        224.006,
+    ] # mm
 
-# calculate mm / px aka pixel spacing
-print("distances:")
-pixel_spacing = 0
-for i in range(4):
-    cali_dist = cali_dists[i]
-    it = i * 2
-    pix_dist = dist(images[0].data['fiducials'][it + 1], images[0].data['fiducials'][it])
-    print(f"measured: {pix_dist}")
-    pixel_spacing_estimate = cali_dist / pix_dist
-    print(f"spacing: {pixel_spacing_estimate}")
-    pixel_spacing += pixel_spacing_estimate
-pixel_spacing = pixel_spacing / 4 # mm / px
-print(f"pixel_spacking: {pixel_spacing}")
+    # calculate mm / px aka pixel spacing
+    print("distances:")
+    pixel_spacing = 0
+    for i in range(4):
+        cali_dist = cali_dists[i]
+        it = i * 2
+        pix_dist = dist(images[0].data['fiducials'][it + 1], images[0].data['fiducials'][it])
+        print(f"measured: {pix_dist}")
+        pixel_spacing_estimate = cali_dist / pix_dist
+        print(f"spacing: {pixel_spacing_estimate}")
+        pixel_spacing += pixel_spacing_estimate
+    pixel_spacing = pixel_spacing / 4 # mm / px
+    print(f"pixel_spacking: {pixel_spacing}")
 
-# part c
+    # part c
 
-# fiducial marks from certificate
-images[0].get_affine_transformation_parameters()
-images[1].get_affine_transformation_parameters()
+    # fiducial marks from certificate
+    images[0].get_affine_transformation_parameters()
+    images[1].get_affine_transformation_parameters()
 
-images[0].apply_transformation()
-images[1].apply_transformation()
+    images[0].apply_transformation()
+    images[1].apply_transformation()
 
-# part d
+    # part d
 
-test_data = [
-    [-113.767,	-107.400],
-    [-43.717,	-108.204],
-    [36.361,	-109.132],
-    [106.408,	-109.923],
-    [107.189,	-39.874],
-    [37.137,	-39.070],
-    [-42.919,	-38.158],
-    [-102.968,	-37.446],
-    [-112.052,	42.714],
-    [-42.005,	41.903],
-    [38.051,	40.985],
-    [108.089,	40.189],
-    [108.884,	110.221],
-    [38.846,	111.029],
-    [-41.208,	111.961],
-    [-111.249,	112.759],
-]
+    test_data = [
+        [-113.767,	-107.400],
+        [-43.717,	-108.204],
+        [36.361,	-109.132],
+        [106.408,	-109.923],
+        [107.189,	-39.874],
+        [37.137,	-39.070],
+        [-42.919,	-38.158],
+        [-102.968,	-37.446],
+        [-112.052,	42.714],
+        [-42.005,	41.903],
+        [38.051,	40.985],
+        [108.089,	40.189],
+        [108.884,	110.221],
+        [38.846,	111.029],
+        [-41.208,	111.961],
+        [-111.249,	112.759],
+    ]
 
-test_data_reseaux = [
-    [-110,	-110],
-    [-40,	-110],
-    [40,	-110],
-    [110,	-110],
-    [110,	-40],
-    [40,	-40],
-    [-40,	-40],
-    [-100,	-40],
-    [-110,	40],
-    [-40,	40],
-    [40,	40],
-    [110,	40],
-    [110,	110],
-    [40,	110],
-    [-40,	110],
-    [-110,	110],
-]
-print("\nlecture data:")
-x_hat_test = get_affine_transformation_parameters(test_data, test_data_reseaux, "test")
-affine_transformation(data, x_hat_test)
+    test_data_reseaux = [
+        [-110,	-110],
+        [-40,	-110],
+        [40,	-110],
+        [110,	-110],
+        [110,	-40],
+        [40,	-40],
+        [-40,	-40],
+        [-100,	-40],
+        [-110,	40],
+        [-40,	40],
+        [40,	40],
+        [110,	40],
+        [110,	110],
+        [40,	110],
+        [-40,	110],
+        [-110,	110],
+    ]
+    print("\nlecture data:")
+    x_hat_test = get_affine_transformation_parameters(test_data, test_data_reseaux, "test")
+    affine_transformation(data, x_hat_test)
 
-# part e
+    # part e
 
-print("\n\npart e")
+    print("\n\npart e")
 
-object_coords = [
-    [-399.28, -679.72, 1090.96],
-    [109.70, -642.35, 1086.43],
-    [475.55, -538.18, 1090.50],
-    [517.62, -194.43, 1090.65],
-    [-466.39, -542.31, 1091.55],
-    [42.73, -412.19, 1090.82],
-    [321.09, -667.45, 1083.49],
-    [527.78, -375.72, 1092.00]
-]
+    object_coords = [
+        [-399.28, -679.72, 1090.96],
+        [109.70, -642.35, 1086.43],
+        [475.55, -538.18, 1090.50],
+        [517.62, -194.43, 1090.65],
+        [-466.39, -542.31, 1091.55],
+        [42.73, -412.19, 1090.82],
+        [321.09, -667.45, 1083.49],
+        [527.78, -375.72, 1092.00]
+    ]
 
-avg_h = 0
-for coords in object_coords:
-    x, y, z = coords
-    avg_h = avg_h + z
-avg_h = avg_h / len(object_coords)
+    avg_h = 0
+    for coords in object_coords:
+        x, y, z = coords
+        avg_h = avg_h + z
+    avg_h = avg_h / len(object_coords)
 
-flying_height = 751.4637599031875 # flying height from Lab 1
-H = flying_height + avg_h
+    flying_height = 751.4637599031875 # flying height from Lab 1
+    H = flying_height + avg_h
 
-print(avg_h)
-print(H)
+    print(avg_h)
+    print(H)
 
-images[0].apply_corrections(avg_h, H)
-images[1].apply_corrections(avg_h, H)
+    images[0].apply_corrections(avg_h, H)
+    images[1].apply_corrections(avg_h, H)
 
-array_to_word_table(concat_2d(images[0].rad_table, images[1].rad_table), f"radial_lens", float, decimals=4)
-array_to_word_table(concat_2d(images[0].dec_table, images[1].dec_table), f"decentering_lens", float, decimals=4)
-array_to_word_table(concat_2d(images[0].atm_table, images[1].atm_table), f"atmospheric_refraction", float, decimals=4)
+    array_to_word_table(concat_2d(images[0].rad_table, images[1].rad_table), f"radial_lens", float, decimals=4)
+    array_to_word_table(concat_2d(images[0].dec_table, images[1].dec_table), f"decentering_lens", float, decimals=4)
+    array_to_word_table(concat_2d(images[0].atm_table, images[1].atm_table), f"atmospheric_refraction", float, decimals=4)
 
-final_table = []
-for i in range(len(images[0].measurements)):
-    new_row = []
-    for j in range(len(images[0].measurements[0])):
-        if j % 2 == 0:
-            new_row.append(images[0].measurements[i][j])
-            new_row.append(images[0].measurements[i][j + 1])
-            new_row.append(images[1].measurements[i][j])
-            new_row.append(images[1].measurements[i][j + 1])
+    final_table = []
+    for i in range(len(images[0].measurements)):
+        new_row = []
+        for j in range(len(images[0].measurements[0])):
+            if j % 2 == 0:
+                new_row.append(images[0].measurements[i][j])
+                new_row.append(images[0].measurements[i][j + 1])
+                new_row.append(images[1].measurements[i][j])
+                new_row.append(images[1].measurements[i][j + 1])
 
-    final_table.append(new_row)
+        final_table.append(new_row)
 
-print("\nimage 27")
-for v in images[0].measurements:
-    print(f"{v[8]}, {v[9]}")
-print("\nimage 28")
-for v in images[1].measurements:
-    print(f"{v[8]}, {v[9]}")
+    print("\nimage 27")
+    for v in images[0].measurements:
+        print(f"{v[8]}, {v[9]}")
+    print("\nimage 28")
+    for v in images[1].measurements:
+        print(f"{v[8]}, {v[9]}")
 
-array_to_word_table(final_table, f"measurements", float, decimals=3)
+    array_to_word_table(final_table, f"measurements", float, decimals=3)
 
-doc.save("output.docx")
+    print(np.array(images[0].final))
 
+    doc.save("output.docx")
+
+if __name__ == "__main__":
+    main()
