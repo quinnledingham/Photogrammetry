@@ -1,4 +1,4 @@
 */images
-*/.vscode
-*/.venv
+.vscode
+.venv
 */__pycache__
