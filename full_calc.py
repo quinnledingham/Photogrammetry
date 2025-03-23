@@ -12,7 +12,7 @@ import lab3_calc
 import lab4_calc
 
 # Lab 2
-
+print("\n\nCorrections\n")
 df = pd.read_excel('./Lab2/data.xlsx')
 
 data = []
@@ -65,6 +65,7 @@ for i in images:
     i.apply_corrections(avg_h, H)
 
 # Lab 3
+print("\n\nRelative Orientation\n")
 
 print(np.array(images[1].tie))
 rel_ori = lab3_calc.Relative_Orientation(images[0].tie, images[1].tie, 92, camera.f)
@@ -73,12 +74,11 @@ model_tie_points = np.array(rel_ori.space_intersection(images[0].tie, images[1].
 model_control_points = np.array(rel_ori.space_intersection(images[0].control, images[1].control))
 
 # Lab 4
+print("\n\nAbsolute Orientation\n")
 
-selected_indices = [0, 2, 3] # what indices are control points
+selected_indices = [1, 2, 3, 4] # what indices are control points
 control_points = model_control_points[selected_indices]
 control_object_coords = object_coords[selected_indices]
 check_points = np.delete(model_control_points, selected_indices, axis=0)
 
-#print(control_points)
-
-abs_ori = lab4_calc.Absolute_Orientation(control_points, control_object_coords, rel_ori.rotation_parameters)
+abs_ori = lab4_calc.Absolute_Orientation("full calc", control_points, control_object_coords, rel_ori.right_pc, rel_ori.rotation_parameters)
