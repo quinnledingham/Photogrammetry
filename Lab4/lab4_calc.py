@@ -5,6 +5,7 @@ from sympy import *
 import numpy as np
 import math
 import copy
+import matplotlib.pyplot as plt
 
 from docx import Document
 
@@ -69,10 +70,15 @@ class Absolute_Orientation:
         row.append(diff(o, tz))
         partial_derivatives.append(row)
 
-    def __init__(self, name, model, object, right_pc):
+    def __init__(self, name, model, object, base, rel_ori):
         self.model = model
         self.object = object
         self.name = name
+
+        #self.plot()
+
+        array2d_to_word_table(self.model, f"{self.name} input model")
+        array2d_to_word_table(self.object, f"{self.name} input object")
 
         # Getting parameters
         self.inital_approx(np.array(self.object[0]), np.array(self.object[1]), np.array(self.model[0]), np.array(self.model[1]))
@@ -84,17 +90,22 @@ class Absolute_Orientation:
         array_to_word_table(self.deg_parameters, f"{self.name} Parameters")
 
         # object coordinates and residuals
-        self.transformed_points, self.residuals = self.get_ground_coordinates(self.model)
+        self.transformed_points = self.get_ground_coordinates(self.model)
+        self.residuals = self.get_residuals(self.transformed_points, self.object)
         array2d_to_word_table(self.transformed_points, f"{self.name} transformed model points")
         array2d_to_word_table(self.residuals, f"{self.name} residuals for transformed model points")
 
         # transforming perspective centers
         left_image_pc = self.get_ground([0, 0, 0])
-        right_image_pc = self.get_ground(right_pc)
-        array_to_word_table(left_image_pc, f"{self.name} left perspective center")
-        array_to_word_table(right_image_pc, f"{self.name} right perspective center")
+        right_image_pc = self.get_ground(base)
+        array2d_to_word_table([left_image_pc], f"{self.name} left perspective center")
+        array2d_to_word_table([right_image_pc], f"{self.name} right perspective center")
 
-        print(self.extract_angles(right_pc, self.parameters))
+        print(f"baseline distance: {np.linalg.norm(np.array(left_image_pc) - np.array(right_image_pc))}")
+
+        extracted_angles = self.extract_angles(rel_ori, self.parameters)
+        print(extracted_angles)
+        array2d_to_word_table(extracted_angles, f"{self.name} extracted angles")
 
     def inital_approx(self, o1, o2, m1, m2):
         ao = atan((o2[0] - o1[0])/(o2[1] - o1[1]))
@@ -155,7 +166,7 @@ class Absolute_Orientation:
             if np.max(rel_corrections) < 1e-3: # if converged
                 print(f"Iterations: {iterations}")
                 A, misclosure_vector = self.design_matrix()
-                print(f"Residuals: {misclosure_vector}")
+                print(f"Residuals: {np.array(misclosure_vector)}")
 
                 # correlation matrix
                 cov = np.linalg.inv(A.T @ A)
@@ -206,19 +217,27 @@ class Absolute_Orientation:
 
     def get_ground_coordinates(self, model_points):
         transformed_points = []
-        residuals = [] # last row is going to RMSE of column
         for coord in model_points:
             transformed_coord = self.get_ground(coord)
             transformed_points.append(transformed_coord)
-            residuals.append(self.misclosure(coord, transformed_coord))
+
+        return transformed_points
+
+    def get_residuals(self, transformed_points, ground_points):
+        residuals = []
+        for i in range(len(transformed_points)):
+            x = transformed_points[i][0] - ground_points[i][0]
+            y = transformed_points[i][1] - ground_points[i][1]
+            z = transformed_points[i][2] - ground_points[i][2]
+            residuals.append([x, y, z])
 
         # compute MeanError and RMSE
         residuals = np.array(residuals)
-        mean_error = np.mean(residuals, axis=0)  # Compute mean error for each column
+        mean_error = np.mean(np.abs(residuals), axis=0)  # Compute mean error for each column
         rmse = np.sqrt(np.mean(np.square(residuals), axis=0))
         residuals = np.vstack([residuals, mean_error, rmse])
-
-        return transformed_points, residuals
+        
+        return residuals
 
     def evaluate_rotation(self, parameters):
         new_eq = rotation_matrix.subs({
@@ -251,16 +270,40 @@ class Absolute_Orientation:
     # extract angles from the relative parameters and the absolutae parmeters
     # the angles for going from image to object space
     def extract_angles(self, rel_p, abs_p):
+        array2d_to_word_table([rel_p], f"{self.name} relative orientation parameters")
         M_i_m_left = self.evaluate_rotation(self.get_rad_parameters([0, 0, 0]))
         M_i_m_right = self.evaluate_rotation(self.get_rad_parameters(rel_p)) # relative orientation rotation parameters
+        array2d_to_word_table(M_i_m_left.tolist(), f"{self.name} M_i_m_left")
+        array2d_to_word_table(M_i_m_right.tolist(), f"{self.name} M_i_m_right")
+
         M_o_m = self.evaluate_rotation(abs_p)
+        array2d_to_word_table(M_o_m.tolist(), f"{self.name} M_o_m")
+        array2d_to_word_table(M_o_m.T.tolist(), f"{self.name} M_o_m.T")
+
         M_i_o_left = M_i_m_left * M_o_m.T
         M_i_o_right = M_i_m_right * M_o_m.T
+        array2d_to_word_table(M_i_o_left.tolist(), f"{self.name} M_i_o_left")
+        array2d_to_word_table(M_i_o_right.tolist(), f"{self.name} M_i_o_right")
 
         angles = []
         angles.append(self.get_angle(np.array(M_i_o_left).astype(np.float64)))
         angles.append(self.get_angle(np.array(M_i_o_right).astype(np.float64)))
         return angles
+
+    def plot(self):
+        points = np.array(self.model)
+
+        plt.figure()
+
+        plt.plot(points[:, 0], points[:, 1], 'ro')
+        plt.title('GCPs in model space')
+        plt.xlabel('x (mm)')
+        plt.ylabel('y (mm)')
+        plt.grid(True)
+        plt.axis([-125, 125, -125, 125])
+
+        plt.tight_layout()
+        plt.show()
 
 def main():
 
@@ -277,7 +320,7 @@ def main():
         [321.09, -667.45, 1083.49],  # 202
         [527.78, -375.72, 1092.00]   # 203
     ])
-
+    '''
     all_model_points = np.array([
         [-9.5921, 96.2715, -158.3930],  # 100
         [-2.3846, -5.9159, -156.4915],  # 102
@@ -288,22 +331,39 @@ def main():
         [-7.5412, -48.3543, -155.9639], # 202
         [50.8805, -89.9778, -152.9167]  # 203
     ])
+    '''
+    all_model_points = np.array([
+        [-9.5975,	96.3215,	-153.4711], # 100
+        [-2.3859,	-5.9182,	-151.6286], # 102
+        [18.3766,	-79.3583,	-148.7698], # 104
+        [87.3915,	-88.0704,	-148.2892], # 105
+        [18.1762,	109.7568,	-153.5850], # 200
+        [43.8954,	7.3577, 	-150.9432], # 201
+        [-7.5452,	-48.3790,	-151.1187], # 202
+        [50.9073,	-90.0254,	-148.1656] # 203
+    ])
 
-    selected_indices = [0, 2, 3] # what indices are control points
+    array2d_to_word_table(object_coords, f"all object")
+    array2d_to_word_table(all_model_points, f"all model")
+
+    selected_indices = [1, 2, 3, 4] # what indices are control points
 
     # extracting control and check points
     control_points = all_model_points[selected_indices]
     check_points = np.delete(all_model_points, selected_indices, axis=0)
     control_object_coords = object_coords[selected_indices]
+    check_object_points = np.delete(object_coords, selected_indices, axis=0)
 
     print(f"Control Points {control_points}")
 
-    lab_abs = Absolute_Orientation("Lab", control_points, control_object_coords, [-1.0032, 0.2585, -1.7538])
+    lab_abs = Absolute_Orientation("Lab", control_points, control_object_coords, [92, -1.4649, -1.2609], [-0.9724, 0.251, -1.7526])
 
     # transforming check points
-    check_transformed, check_residuals = lab_abs.get_ground_coordinates(check_points)
+    check_transformed = lab_abs.get_ground_coordinates(check_points)
+    check_residuals = lab_abs.get_residuals(check_transformed, check_object_points)
     array2d_to_word_table(check_transformed, f"check points in object")
     array2d_to_word_table(check_residuals, f"check points residuals")
+    print(f"Check Residuals:\n{check_residuals}")
 
     # transforming tie points
     tie_points = np.array([
@@ -315,9 +375,10 @@ def main():
         [84.9816, 102.8444, -157.5453]    # T6
     ])
 
-    tie_transformed, tie_residuals = lab_abs.get_ground_coordinates(tie_points)
+    array2d_to_word_table(tie_points, f"all tie")
+
+    tie_transformed = lab_abs.get_ground_coordinates(tie_points)
     array2d_to_word_table(tie_transformed, f"tie points in object")
-    array2d_to_word_table(tie_residuals, f"tie points residuals")
 
     # test data
     print("\n\nTest Data\n")
@@ -339,7 +400,7 @@ def main():
         [6905.26,	3279.84,	266.47], # 50
     ]
 
-    test_data = Absolute_Orientation("Test", model_coordinates, object_coordinates, [0.4392, 1.508, 3.1575])
+    test_data = Absolute_Orientation("Test", model_coordinates, object_coordinates, [92, 5.0455, 2.1725], [0.4392, 1.508, 3.1575])
 
     # printing answers out to a word document
     doc.save("output.docx")
