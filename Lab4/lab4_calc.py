@@ -6,6 +6,28 @@ import numpy as np
 import math
 import copy
 
+from docx import Document
+
+# outputing results to a word document
+doc = Document()
+
+# print a array to a word table
+def array_to_word_table(array, name, decimals=4):
+    doc.add_paragraph(name)
+    table = doc.add_table(rows=len(array), cols=1)
+
+    for i, cell in enumerate(array):
+        table.cell(i, 0).text = str(round(cell, decimals))
+
+# print a 2d array to a word table
+def array2d_to_word_table(array, name, decimals=4):
+    doc.add_paragraph(name)
+    table = doc.add_table(rows=len(array), cols=len(array[0]))
+
+    for i, row in enumerate(array):
+        for j, cell in enumerate(row):
+            table.cell(i, j).text = str(round(cell, decimals))
+
 # define equations
 b_omega, b_phi, b_kappa, b_lambda, tx, ty, tz = symbols('b_omega, b_phi, b_kappa, b_lambda, tx, ty, tz')
 mx, my, mz = symbols('mx, my, mz')
@@ -47,17 +69,30 @@ class Absolute_Orientation:
         row.append(diff(o, tz))
         partial_derivatives.append(row)
 
-    def __init__(self, model, object, right_pc):
+    def __init__(self, name, model, object, right_pc):
         self.model = model
         self.object = object
+        self.name = name
 
+        # Getting parameters
         self.inital_approx(np.array(self.object[0]), np.array(self.object[1]), np.array(self.model[0]), np.array(self.model[1]))
+        self.set_deg_parameters()
+        array_to_word_table(self.deg_parameters, f"{self.name} Initial Parameters")
         self.estimate_parameters()
         self.set_deg_parameters()
         print(f"Final parameters {self.deg_parameters}")
+        array_to_word_table(self.deg_parameters, f"{self.name} Parameters")
 
-        self.get_ground_coordinates()
-        print(self.transformed_points)
+        # object coordinates and residuals
+        self.transformed_points, self.residuals = self.get_ground_coordinates(self.model)
+        array2d_to_word_table(self.transformed_points, f"{self.name} transformed model points")
+        array2d_to_word_table(self.residuals, f"{self.name} residuals for transformed model points")
+
+        # transforming perspective centers
+        left_image_pc = self.get_ground([0, 0, 0])
+        right_image_pc = self.get_ground(right_pc)
+        array_to_word_table(left_image_pc, f"{self.name} left perspective center")
+        array_to_word_table(right_image_pc, f"{self.name} right perspective center")
 
         print(self.extract_angles(right_pc, self.parameters))
 
@@ -117,10 +152,26 @@ class Absolute_Orientation:
 
             rel_corrections = np.abs(corrections / (np.abs(self.parameters) + 1e-10))
             iterations += 1
-            if np.max(rel_corrections) < 1e-3:
+            if np.max(rel_corrections) < 1e-3: # if converged
                 print(f"Iterations: {iterations}")
                 A, misclosure_vector = self.design_matrix()
                 print(f"Residuals: {misclosure_vector}")
+
+                # correlation matrix
+                cov = np.linalg.inv(A.T @ A)
+                std_devs = np.sqrt(np.diag(cov))  # Standard deviations of parameters
+                corr_matrix = cov / np.outer(std_devs, std_devs)
+                print("Correlation Matrix of Estimated Parameters:\n", corr_matrix)
+                array2d_to_word_table(corr_matrix.tolist(), f"{self.name} Correlation Matrix")
+
+                # Compute hat matrix and redundancy numbers
+                H = A @ np.linalg.inv(A.T @ A) @ A.T
+                redundancy_numbers = 1 - np.diag(H)  # Redundancy numbers for each observation
+                redundancy_table = redundancy_numbers.reshape(len(self.model), 3)
+
+                print("Redundancy Numbers:\n", redundancy_numbers)
+                array2d_to_word_table(redundancy_table.tolist(), f"{self.name} Redundancy Numbers", decimals=4)
+
                 break
 
     def evaluate(self, eq, point):
@@ -153,10 +204,21 @@ class Absolute_Orientation:
         z = self.evaluate(self.zO, coord)
         return [x, y, z]
 
-    def get_ground_coordinates(self):
-        self.transformed_points = []
-        for coord in self.model:
-            self.transformed_points.append(self.get_ground(coord))
+    def get_ground_coordinates(self, model_points):
+        transformed_points = []
+        residuals = [] # last row is going to RMSE of column
+        for coord in model_points:
+            transformed_coord = self.get_ground(coord)
+            transformed_points.append(transformed_coord)
+            residuals.append(self.misclosure(coord, transformed_coord))
+
+        # compute MeanError and RMSE
+        residuals = np.array(residuals)
+        mean_error = np.mean(residuals, axis=0)  # Compute mean error for each column
+        rmse = np.sqrt(np.mean(np.square(residuals), axis=0))
+        residuals = np.vstack([residuals, mean_error, rmse])
+
+        return transformed_points, residuals
 
     def evaluate_rotation(self, parameters):
         new_eq = rotation_matrix.subs({
@@ -229,14 +291,21 @@ def main():
 
     selected_indices = [0, 2, 3] # what indices are control points
 
+    # extracting control and check points
     control_points = all_model_points[selected_indices]
     check_points = np.delete(all_model_points, selected_indices, axis=0)
     control_object_coords = object_coords[selected_indices]
 
     print(f"Control Points {control_points}")
 
-    lab_abs = Absolute_Orientation(control_points, control_object_coords, [-1.0032, 0.2585, -1.7538])
+    lab_abs = Absolute_Orientation("Lab", control_points, control_object_coords, [-1.0032, 0.2585, -1.7538])
 
+    # transforming check points
+    check_transformed, check_residuals = lab_abs.get_ground_coordinates(check_points)
+    array2d_to_word_table(check_transformed, f"check points in object")
+    array2d_to_word_table(check_residuals, f"check points residuals")
+
+    # transforming tie points
     tie_points = np.array([
         [-9.9688, 14.8164, -156.2243],    # T1
         [92.0658, -4.0001, -154.4931],    # T2
@@ -245,6 +314,10 @@ def main():
         [-9.4881, 96.2460, -158.3431],    # T5
         [84.9816, 102.8444, -157.5453]    # T6
     ])
+
+    tie_transformed, tie_residuals = lab_abs.get_ground_coordinates(tie_points)
+    array2d_to_word_table(tie_transformed, f"tie points in object")
+    array2d_to_word_table(tie_residuals, f"tie points residuals")
 
     # test data
     print("\n\nTest Data\n")
@@ -266,7 +339,10 @@ def main():
         [6905.26,	3279.84,	266.47], # 50
     ]
 
-    test_data = Absolute_Orientation(model_coordinates, object_coordinates, [0.4392, 1.508, 3.1575])
+    test_data = Absolute_Orientation("Test", model_coordinates, object_coordinates, [0.4392, 1.508, 3.1575])
+
+    # printing answers out to a word document
+    doc.save("output.docx")
 
 #print(test_data.get_ground([92, 5.0455, 2.1725]))
 if __name__ == "__main__":
