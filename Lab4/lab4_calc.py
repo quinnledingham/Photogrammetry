@@ -179,8 +179,8 @@ class Absolute_Orientation:
                 H = A @ np.linalg.inv(A.T @ A) @ A.T
                 redundancy_numbers = 1 - np.diag(H)  # Redundancy numbers for each observation
                 redundancy_table = redundancy_numbers.reshape(len(self.model), 3)
-
-                print("Redundancy Numbers:\n", redundancy_numbers)
+                
+                print(f"Redundancy Numbers: {redundancy_numbers}\nSize: {np.sum(redundancy_table[0])}\n")
                 array2d_to_word_table(redundancy_table.tolist(), f"{self.name} Redundancy Numbers", decimals=4)
 
                 break
@@ -346,7 +346,8 @@ def main():
     array2d_to_word_table(object_coords, f"all object")
     array2d_to_word_table(all_model_points, f"all model")
 
-    selected_indices = [1, 2, 3, 4] # what indices are control points
+    selected_indices = [1, 2, 3, 4, 6] # what indices are control points
+    #selected_indices = [3, 4, 6]
 
     # extracting control and check points
     control_points = all_model_points[selected_indices]
