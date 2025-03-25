@@ -1,6 +1,3 @@
-# Comment on accuracy
-#   Any sort of consistent error
-
 from sympy import *
 import numpy as np
 import math
@@ -74,8 +71,6 @@ class Absolute_Orientation:
         self.model = model
         self.object = object
         self.name = name
-
-        #self.plot()
 
         array2d_to_word_table(self.model, f"{self.name} input model")
         array2d_to_word_table(self.object, f"{self.name} input object")
@@ -180,7 +175,8 @@ class Absolute_Orientation:
                 redundancy_numbers = 1 - np.diag(H)  # Redundancy numbers for each observation
                 redundancy_table = redundancy_numbers.reshape(len(self.model), 3)
                 
-                print(f"Redundancy Numbers: {redundancy_numbers}\nSize: {np.sum(redundancy_table[0])}\n")
+                s = np.sum(redundancy_table[0]) + np.sum(redundancy_table[1]) + np.sum(redundancy_table[2])
+                print(f"Redundancy Numbers: {redundancy_numbers}\nSize: {s}\n")
                 array2d_to_word_table(redundancy_table.tolist(), f"{self.name} Redundancy Numbers", decimals=4)
 
                 break
@@ -268,7 +264,7 @@ class Absolute_Orientation:
         return [omega, phi, kappa]
 
     # extract angles from the relative parameters and the absolutae parmeters
-    # the angles for going from image to object space
+    # the angles for going from object to image space
     def extract_angles(self, rel_p, abs_p):
         array2d_to_word_table([rel_p], f"{self.name} relative orientation parameters")
         M_i_m_left = self.evaluate_rotation(self.get_rad_parameters([0, 0, 0]))
@@ -310,6 +306,8 @@ def main():
     # lab data
     print("\n\nLab Data\n")
 
+    pprint(rotation_matrix)
+
     object_coords = np.array([
         [-399.28, -679.72, 1090.96], # 100
         [109.70, -642.35, 1086.43],  # 102
@@ -320,27 +318,16 @@ def main():
         [321.09, -667.45, 1083.49],  # 202
         [527.78, -375.72, 1092.00]   # 203
     ])
-    '''
+
     all_model_points = np.array([
-        [-9.5921, 96.2715, -158.3930],  # 100
-        [-2.3846, -5.9159, -156.4915],  # 102
-        [18.3668, -79.3166, -153.5411], # 104
-        [87.3462, -88.0244, -153.0441], # 105
-        [18.1668, 109.7020, -158.5132], # 200
-        [43.8732, 7.3538, -155.7842],   # 201
-        [-7.5412, -48.3543, -155.9639], # 202
-        [50.8805, -89.9778, -152.9167]  # 203
-    ])
-    '''
-    all_model_points = np.array([
-        [-9.5975,	96.3215,	-153.4711], # 100
-        [-2.3859,	-5.9182,	-151.6286], # 102
-        [18.3766,	-79.3583,	-148.7698], # 104
-        [87.3915,	-88.0704,	-148.2892], # 105
-        [18.1762,	109.7568,	-153.5850], # 200
-        [43.8954,	7.3577, 	-150.9432], # 201
-        [-7.5452,	-48.3790,	-151.1187], # 202
-        [50.9073,	-90.0254,	-148.1656] # 203
+        [-9.5975,	96.3215,	-153.4711], # 100 0
+        [-2.3859,	-5.9182,	-151.6286], # 102 1
+        [18.3766,	-79.3583,	-148.7698], # 104 2
+        [87.3915,	-88.0704,	-148.2892], # 105 3
+        [18.1762,	109.7568,	-153.5850], # 200 4
+        [43.8954,	7.3577, 	-150.9432], # 201 5
+        [-7.5452,	-48.3790,	-151.1187], # 202 6
+        [50.9073,	-90.0254,	-148.1656]  # 203 7
     ])
 
     array2d_to_word_table(object_coords, f"all object")
@@ -358,6 +345,7 @@ def main():
     print(f"Control Points {control_points}")
 
     lab_abs = Absolute_Orientation("Lab", control_points, control_object_coords, [92, -1.4649, -1.2609], [-0.9724, 0.251, -1.7526])
+    lab_abs.plot()
 
     # transforming check points
     check_transformed = lab_abs.get_ground_coordinates(check_points)
