@@ -34,6 +34,8 @@ partial_derivatives = []
 partial_derivatives.append(get_partial(xij))
 partial_derivatives.append(get_partial(yij))
 
+pprint(partial_derivatives[1][4])
+
 class Resection():
 
     def __init__(self, image, object, focal_length, variance):
@@ -111,6 +113,9 @@ class Resection():
         
         return float(N(new_eq, 50))
         
+class Intersection():
+    def __init__(self):
+        pass
 
 def main():
     # test data 
