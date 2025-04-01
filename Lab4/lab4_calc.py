@@ -176,7 +176,7 @@ class Absolute_Orientation:
                 redundancy_table = redundancy_numbers.reshape(len(self.model), 3)
                 
                 s = np.sum(redundancy_table[0]) + np.sum(redundancy_table[1]) + np.sum(redundancy_table[2])
-                print(f"Redundancy Numbers: {redundancy_numbers}\nSize: {s}\n")
+                print(f"Redundancy Numbers: {redundancy_numbers}\nSize: {s}")
                 array2d_to_word_table(redundancy_table.tolist(), f"{self.name} Redundancy Numbers", decimals=4)
 
                 break
