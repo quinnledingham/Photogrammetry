@@ -41,6 +41,19 @@ partial_derivatives = []
 partial_derivatives.append(get_partial(xij))
 partial_derivatives.append(get_partial(yij))
 
+def get_redundancy_numbers(A):
+    # Compute hat matrix and redundancy numbers
+    H = A @ np.linalg.inv(A.T @ A) @ A.T
+    redundancy_numbers = 1 - np.diag(H)  # Redundancy numbers for each observation
+
+    num_rows = len(A)
+    num_cols = redundancy_numbers.size // num_rows
+    redundancy_table = redundancy_numbers.reshape(num_rows, num_cols)
+
+    s = np.sum(redundancy_numbers)
+    print(f"Redundancy Numbers: {redundancy_numbers} Sum: {s}")
+    #array2d_to_word_table(redundancy_table.tolist(), f"{self.name} Redundancy Numbers", decimals=4)
+
 class Resection():
 
     def __init__(self, image, object, focal_length, variance):
@@ -149,8 +162,6 @@ class Intersection():
 
         self.left_eops = self.get_rad_parameters(self.left_eops)
         self.right_eops = self.get_rad_parameters(self.right_eops)
-        #b1 = (xij - Xp) * W
-        #print(evaluate(b1, self.left_eops))
 
         self.partial_derivatives = []
         self.partial_derivatives.append(self.get_partial(xij))
@@ -168,12 +179,30 @@ class Intersection():
             xij_bar: image[0],
             yij_bar: image[1]
         })
-        return float(N(new_eq, 50))
+        return np.float64(N(new_eq, 50))
 
-    def do_iterations(self, image):
-        self.image = image
-        self.object = [0, 0, 0] # what we are solving for
-        A, w = self.design_matrix()
+    def approximate_parameters(self):
+        a11 = xij_bar*m31 + c*m11
+        a12 = xij_bar*m32 + c*m12
+        a13 = xij_bar*m33 + c*m13
+
+        a21 = yij_bar*m31 + c*m21
+        a22 = yij_bar*m32 + c*m22
+        a23 = yij_bar*m33 + c*m23
+
+        eq_A = np.matrix([
+            [a11, a12, a13],
+            [a21, a22, a23],
+            [a11, a12, a13],
+            [a21, a22, a23],
+        ])
+
+        A = np.zeros((4,3))
+
+        for i in range(3): A[0, i] = self.evaluate_b(eq_A[0, i], self.left_eops, [self.image[0], self.image[1]])
+        for i in range(3): A[1, i] = self.evaluate_b(eq_A[1, i], self.left_eops, [self.image[0], self.image[1]])
+        for i in range(3): A[2, i] = self.evaluate_b(eq_A[2, i], self.right_eops, [self.image[2], self.image[3]])
+        for i in range(3): A[3, i] = self.evaluate_b(eq_A[3, i], self.right_eops, [self.image[2], self.image[3]])
 
         b1 = (xij_bar*m31+c*m11)*Xc + (xij_bar*m32+c*m12)*Yc + (xij_bar*m33+c*m13)*Zc
         b2 = (yij_bar*m31+c*m21)*Xc + (yij_bar*m32+c*m22)*Yc + (yij_bar*m33+c*m23)*Zc
@@ -184,9 +213,35 @@ class Intersection():
             self.evaluate_b(b1, self.right_eops, [self.image[2], self.image[3]]),
             self.evaluate_b(b2, self.right_eops, [self.image[2], self.image[3]])
         ]
+
+        self.parameters = np.linalg.inv(A.T @ A) @ A.T @ b
+
+    def do_iterations(self, image):
+        self.image = image
+        self.approximate_parameters()
+        print(self.parameters)
+        A, w = self.design_matrix()
         print(A)
-        #self.object = np.linalg.inv(A.T @ A) @ A.T @ b
-        print(b)
+        print(w)
+
+        iterations = 0
+        while(1):
+            A, misclosure_vector = self.design_matrix()
+
+            corrections = -(np.linalg.inv(A.T @ A) @ A.T @ np.array(misclosure_vector))
+            self.parameters = self.parameters + np.array(corrections).ravel()
+
+            rel_corrections = np.abs(corrections / (np.abs(self.parameters) + 1e-10))
+            iterations += 1
+            if np.max(rel_corrections) < 1e-3: # if converged
+                print(f"Iterations: {iterations}")
+                print(f"Parameters: {np.array(self.parameters)}")
+                A, misclosure_vector = self.design_matrix()
+                print(f"Residuals: {np.array(misclosure_vector)}")
+                get_redundancy_numbers(A)
+                sigma_x = 15E-3**2 * np.linalg.inv(A.T @ A)
+                print(f"STD: {np.sqrt(np.diag(sigma_x))}")
+                break
 
     def get_partial(self, o):
         row = []
@@ -199,88 +254,28 @@ class Intersection():
         A = []
         misclosure_vector = []
         for coord_index in range(4):
-            A_row = []
-            
-            p_e_index = 0
-            if coord_index % 2 != 0:
+            if coord_index == 0 or coord_index == 1:
+                eops = self.left_eops
+            else:
+                eops = self.right_eops
+
+            if coord_index % 2 == 0: # x
+                eq = xij
+                p_e_index = 0
+            else: # y
+                eq = yij
                 p_e_index = 1
             p_e = self.partial_derivatives[p_e_index]
 
+            A_row = []
             for p in p_e:
-                value = self.evaluate(p, self.left_eops, self.object)
+                value = -self.evaluate(p, eops, self.parameters)
                 A_row.append(value)
 
             A.append(A_row)
-            misclosure_vector += self.misclosure(self.object, self.image[coord_index])
+            misclosure_vector += [self.evaluate(eq, eops, self.parameters) - self.image[coord_index]]
+
         return np.matrix(A), misclosure_vector
-
-    def misclosure(self, object_coord, image_coord):
-        w = [
-            self.evaluate(xij, self.left_eops, object_coord) - image_coord,
-        ]
-        return w
-
-
-def deg_to_rad(degrees):
-    return np.radians(degrees)
-
-def rotation_matrix(omega, phi, kappa):
-    """Compute the rotation matrix from omega, phi, kappa (in radians)."""
-    cw, cp, ck = np.cos([omega, phi, kappa])
-    sw, sp, sk = np.sin([omega, phi, kappa])
-    
-    R = np.array([
-        [cp * ck, sw * sp * ck - cw * sk, cw * sp * ck + sw * sk],
-        [cp * sk, sw * sp * sk + cw * ck, cw * sp * sk - sw * ck],
-        [-sp, sw * cp, cw * cp]
-    ])
-    return R
-
-def approximate_intersection(image_points, eops, focal_length=152.0):
-    """Compute initial approximations of 3D intersection points using least squares."""
-    # Convert angles to radians
-    w_rad, p_rad, k_rad = map(deg_to_rad, eops[3:])
-    
-    # Compute rotation matrices for left and right images
-    R_left = rotation_matrix(w_rad[0], p_rad[0], k_rad[0])
-    R_right = rotation_matrix(w_rad[1], p_rad[1], k_rad[1])
-    
-    # Camera centers
-    Xc = eops[0]
-    Yc = eops[1]
-    Zc = eops[2]
-    
-    # Forming direction vectors from image coordinates
-    approx_points = []
-    for i in range(image_points.shape[0]):
-        xl, yl, xr, yr = image_points[i]
-        
-        # Image coordinates in homogeneous form
-        left_vec = R_left @ np.array([xl, yl, -focal_length])
-        right_vec = R_right @ np.array([xr, yr, -focal_length])
-        
-        # Normalize vectors
-        left_vec /= np.linalg.norm(left_vec)
-        right_vec /= np.linalg.norm(right_vec)
-        
-        # Midpoint method for ray intersection
-        P1 = np.array([Xc[0], Yc[0], Zc[0]])
-        P2 = np.array([Xc[1], Yc[1], Zc[1]])
-        
-        A = np.vstack([left_vec, -right_vec]).T
-        b = P2 - P1
-        
-        # Solve for lambda and mu
-        lambdas = np.linalg.lstsq(A, b, rcond=None)[0]
-        
-        # Compute approximate 3D point
-        Xp = P1 + lambdas[0] * left_vec
-        
-        approx_points.append(Xp)
-    
-    return np.array(approx_points)
-
-
 
 def main():
     # test data 
@@ -318,11 +313,7 @@ def main():
 
     test_inter = Intersection(test_intersection_image_points, test_intersection_eops, 152.150)
     test_inter.do_iterations(test_intersection_image_points[0])
-
-    # Example usage
-    #approx_3D_points = approximate_intersection(test_intersection_image_points, test_intersection_eops)
-    #print("Approximate 3D Points:")
-    #print(approx_3D_points)
+    test_inter.do_iterations(test_intersection_image_points[1])
 
 if __name__ == '__main__':
     main()
