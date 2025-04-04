@@ -1,9 +1,49 @@
 from sympy import *
 import numpy as np
 import math
+from docx import Document
+import copy
+import sys
+import pandas as pd
+import pickle
+
+sys.path.insert(1, './../Lab2')
+import lab2_calc
+
+object_coords = np.array([
+    [-399.28, -679.72, 1090.96], # 100
+    [109.70, -642.35, 1086.43],  # 102
+    [475.55, -538.18, 1090.50],  # 104
+    [517.62, -194.43, 1090.65],  # 105
+    [-466.39, -542.31, 1091.55], # 200
+    [42.73, -412.19,  1090.82],  # 201
+    [321.09, -667.45, 1083.49],  # 202
+    [527.78, -375.72, 1092.00]   # 203
+])
+
+# outputing results to a word document
+doc = Document()
+
+# print a array to a word table
+def array_to_word_table(array, name, decimals=4):
+    doc.add_paragraph(name)
+    table = doc.add_table(rows=len(array), cols=1)
+
+    for i, cell in enumerate(array):
+        table.cell(i, 0).text = str(round(cell, decimals))
+
+# print a 2d array to a word table
+def array2d_to_word_table(array, name, decimals=4):
+    doc.add_paragraph(name)
+    table = doc.add_table(rows=len(array), cols=len(array[0]))
+
+    for i, row in enumerate(array):
+        for j, cell in enumerate(row):
+            table.cell(i, j).text = str(round(cell, decimals))
 
 Xc, Yc, Zc, omega, phi, kappa = symbols('Xc, Yc, Zc, omega, phi, kappa')
 Xi, Yi, Zi, a, ix, b, iy, tx, ty, c, Xp, Yp = symbols('Xi, Yi, Zi, a, ix, b, iy, tx, ty, c, Xp, Yp')
+xij_bar, yij_bar = symbols('xij_bar, yij_bar')
 
 # Create rotation matrix elements
 m11 = (cos(phi)*cos(kappa))
@@ -25,22 +65,6 @@ W = (m31*(Xi-Xc)+m32*(Yi-Yc)+m33*(Zi-Zc))
 xij = Xp - c * (U/W)
 yij = Yp - c * (V/W)
 
-xij_bar, yij_bar = symbols('xij_bar, yij_bar')
-
-def get_partial(o):
-    row = []
-    row.append(diff(o, Xc))
-    row.append(diff(o, Yc))
-    row.append(diff(o, Zc))
-    row.append(diff(o, omega))
-    row.append(diff(o, phi))
-    row.append(diff(o, kappa))
-    return row
-
-partial_derivatives = []
-partial_derivatives.append(get_partial(xij))
-partial_derivatives.append(get_partial(yij))
-
 def get_redundancy_numbers(A):
     # Compute hat matrix and redundancy numbers
     H = A @ np.linalg.inv(A.T @ A) @ A.T
@@ -52,27 +76,85 @@ def get_redundancy_numbers(A):
 
     s = np.sum(redundancy_numbers)
     print(f"Redundancy Numbers: {redundancy_numbers} Sum: {s}")
-    #array2d_to_word_table(redundancy_table.tolist(), f"{self.name} Redundancy Numbers", decimals=4)
+    return redundancy_numbers, s
 
 class Resection():
-
-    def __init__(self, image, object, focal_length, variance):
+    def __init__(self, name, image, object, focal_length, variance):
+        self.name = name
         self.image = image
         self.object = object
         self.focal_length = focal_length
         self.variance = variance
 
-        self.parameters = [
-            6338.6,  # Xc (m)
-            3984.6,  # Yc (m)
-            1453.1,  # Zc (m)
-            0,       # w (dd)
-            0,       # p (dd)
-            np.radians(-18.854)  # k (dd)
-        ]
+        self.partial_derivatives = []
+        self.partial_derivatives.append(self.get_partial(xij))
+        self.partial_derivatives.append(self.get_partial(yij))
+
+        array2d_to_word_table(self.object, f"{self.name} object points")
+        array2d_to_word_table(self.image, f"{self.name} image points")
+
+        self.approximate_parameters()
+        self.deg_parameters = self.get_deg_parameters(self.parameters)
+        print(f"Approximated Parameters: {self.deg_parameters}")
+        array_to_word_table(self.deg_parameters, f"{self.name} Approximated Parameters")
 
         self.estimate_parameters()
-        print(f"Estimated Parameters: {self.parameters}")
+
+    def get_partial(self, o):
+        row = []
+        row.append(diff(o, Xc))
+        row.append(diff(o, Yc))
+        row.append(diff(o, Zc))
+        row.append(diff(o, omega))
+        row.append(diff(o, phi))
+        row.append(diff(o, kappa))
+        return row
+
+    def get_deg_parameters(self, p):
+        deg_parameters = copy.copy(p)
+        deg_parameters[3] *= 180 / math.pi
+        deg_parameters[4] *= 180 / math.pi
+        deg_parameters[5] *= 180 / math.pi
+        return deg_parameters
+
+    def approximate_parameters(self):
+        # Calculate centroids
+        t_x = np.mean(self.object[:, 0])  # X centroid
+        t_y = np.mean(self.object[:, 1])  # Y centroid
+        x_mean = np.mean(self.image[:, 0])  # x centroid
+        y_mean = np.mean(self.image[:, 1])  # y centroid
+
+        # Center the coordinates
+        X_centered = self.object[:, 0] - t_x
+        Y_centered = self.object[:, 1] - t_y
+        x_centered = self.image[:, 0] - x_mean
+        y_centered = self.image[:, 1] - y_mean
+
+        # Calculate the transformation parameters directly
+        # These formulas approximate the least squares solution
+        numerator_a = np.sum(X_centered * x_centered + Y_centered * y_centered)
+        numerator_b = np.sum(Y_centered * x_centered - X_centered * y_centered)
+        denominator = np.sum(x_centered**2 + y_centered**2)
+
+        a = numerator_a / denominator
+        b = numerator_b / denominator
+
+        # Adjust the translation parameters
+        t_x = t_x - a * x_mean + b * y_mean
+        t_y = t_y - b * x_mean - a * y_mean
+
+        # Calculate rotation angle
+        theta_2D = np.arctan2(b, a)
+
+        # Calculate scale factor
+        lambda_approx = np.sqrt(a**2 + b**2)
+
+        # Calculate Z coordinate of perspective center
+        Z_ave = np.mean(self.object[:, 2])
+        Z_C = self.focal_length * lambda_approx + Z_ave
+
+        # Store the parameters
+        self.parameters = [t_x, t_y, Z_C, 0, 0, theta_2D]
 
     def estimate_parameters(self):
         iterations = 0
@@ -86,8 +168,49 @@ class Resection():
             iterations += 1
             if np.max(rel_corrections) < 1e-3: # if converged
                 print(f"Iterations: {iterations}")
+                print(f"Estimated Parameters: {np.array(self.parameters)}")
+                self.deg_parameters = self.get_deg_parameters(self.parameters)
+                array_to_word_table(self.deg_parameters, f"{self.name} Estimated Parameters")
+
                 A, misclosure_vector = self.design_matrix()
-                print(f"Residuals: {np.array(misclosure_vector)}")
+                residuals = np.array(misclosure_vector)
+                print(f"Residuals: {residuals}")
+                array_to_word_table(residuals, f"{self.name} residuals")
+
+                x_residuals = residuals[0::2]
+                y_residuals = residuals[1::2]  
+                rmsx = np.sqrt(np.mean(np.array(x_residuals)**2))
+                rmsy = np.sqrt(np.mean(np.array(y_residuals)**2))
+
+                print(f"RMS x: {rmsx}")
+                print(f"RMS y: {rmsy}")
+
+                r_numbers, r_sum = get_redundancy_numbers(A)
+
+                r = 8 - 6
+                sigma_obs = 15E-3  # mm
+                v = np.array(residuals)
+                P = 1/(sigma_obs**2) * np.eye(len(v))  # Weight matrix
+                v_squared_weighted_sum = v.T @ P @ v
+                variance_factor = np.sqrt(v_squared_weighted_sum / r)
+
+                other_quantites = []
+                other_quantites.append(rmsx)
+                other_quantites.append(rmsy)
+                other_quantites.append(r_sum)
+                other_quantites.append(variance_factor)
+                print(f"other: {other_quantites}")
+                array_to_word_table(other_quantites, f"{self.name} other quantities")
+
+                # correlation matrix and standard deviation
+                cov = sigma_obs**2 * np.linalg.inv(A.T @ A)
+                std_devs = np.sqrt(np.diag(cov))  # Standard deviations of parameters
+                corr_matrix = cov / np.outer(std_devs, std_devs)
+                print("Correlation Matrix of Estimated Parameters:\n", corr_matrix)
+
+                print(f"STD: {self.get_deg_parameters(std_devs)}")
+                array_to_word_table(self.get_deg_parameters(std_devs), f"{self.name} STD")
+                array2d_to_word_table(corr_matrix.tolist(), f"{self.name} Correlation Matrix")
 
                 break
 
@@ -98,7 +221,7 @@ class Resection():
             for coord_index in range(2):
                 A_row = []
                 
-                for p in partial_derivatives[coord_index]:
+                for p in self.partial_derivatives[coord_index]:
                     value = self.evaluate(p, self.object[point_index])
                     A_row.append(value)
 
@@ -155,10 +278,14 @@ class Intersection():
         dz = p[5] * math.pi / 180
         return [p[0], p[1], p[2], dx, dy, dz]
 
-    def __init__(self, iops, eops, focal_length):
+    def __init__(self, name, left_eops, right_eops, focal_length):
+        self.name = name
         self.focal_length = focal_length
-        self.left_eops = eops[:, 0]
-        self.right_eops = eops[:, 1]
+        self.left_eops = left_eops
+        self.right_eops = right_eops
+
+        array_to_word_table(self.left_eops, f"{self.name} left eops")
+        array_to_word_table(self.right_eops, f"{self.name} right eops")
 
         self.left_eops = self.get_rad_parameters(self.left_eops)
         self.right_eops = self.get_rad_parameters(self.right_eops)
@@ -214,34 +341,60 @@ class Intersection():
             self.evaluate_b(b2, self.right_eops, [self.image[2], self.image[3]])
         ]
 
-        self.parameters = np.linalg.inv(A.T @ A) @ A.T @ b
+        return np.linalg.inv(A.T @ A) @ A.T @ b
 
-    def do_iterations(self, image):
-        self.image = image
-        self.approximate_parameters()
-        print(self.parameters)
-        A, w = self.design_matrix()
+    def do_iterations(self, name, left, right):
+        self.name = name
+        self.image = [left[0], left[1], right[0], right[1]]
+        print(self.image)
+        array_to_word_table(self.image, f"{self.name} image points")
+
+        parameters = self.approximate_parameters()
+        print(parameters)
+        array_to_word_table(parameters, f"{self.name} approximate parameters")
+        
+        A, w = self.design_matrix(parameters)
         print(A)
         print(w)
 
         iterations = 0
         while(1):
-            A, misclosure_vector = self.design_matrix()
+            A, misclosure_vector = self.design_matrix(parameters)
 
             corrections = -(np.linalg.inv(A.T @ A) @ A.T @ np.array(misclosure_vector))
-            self.parameters = self.parameters + np.array(corrections).ravel()
+            parameters = parameters + np.array(corrections).ravel()
 
-            rel_corrections = np.abs(corrections / (np.abs(self.parameters) + 1e-10))
+            rel_corrections = np.abs(corrections / (np.abs(parameters) + 1e-10))
             iterations += 1
             if np.max(rel_corrections) < 1e-3: # if converged
                 print(f"Iterations: {iterations}")
-                print(f"Parameters: {np.array(self.parameters)}")
-                A, misclosure_vector = self.design_matrix()
-                print(f"Residuals: {np.array(misclosure_vector)}")
-                get_redundancy_numbers(A)
-                sigma_x = 15E-3**2 * np.linalg.inv(A.T @ A)
-                print(f"STD: {np.sqrt(np.diag(sigma_x))}")
+                print(f"Parameters: {np.array(parameters)}")
+                array_to_word_table(parameters, f"{self.name} estimated parameters")
+                
+                A, misclosure_vector = self.design_matrix(parameters)
+                residuals = np.array(misclosure_vector)
+                print(f"Residuals: {residuals}")
+                array_to_word_table(residuals, f"{self.name} residuals")
+
+                r_numbers, r_sum = get_redundancy_numbers(A)
+                np.append(r_numbers, r_sum)
+                array_to_word_table(r_numbers, f"{self.name} redundancy numbers")
+
+                sigma_obs = 15E-3  # mm
+
+                # correlation matrix and standard deviation
+                cov = sigma_obs**2 * np.linalg.inv(A.T @ A)
+                std_devs = np.sqrt(np.diag(cov))  # Standard deviations of parameters
+                corr_matrix = cov / np.outer(std_devs, std_devs)
+                print("Correlation Matrix of Estimated Parameters:\n", corr_matrix)
+
+                print(f"STD: {std_devs}")
+                array_to_word_table(std_devs, f"{self.name} STD")
+                array2d_to_word_table(corr_matrix.tolist(), f"{self.name} Correlation Matrix")
+
                 break
+
+        return parameters
 
     def get_partial(self, o):
         row = []
@@ -250,7 +403,7 @@ class Intersection():
         row.append(diff(o, Zc))
         return row
     
-    def design_matrix(self):
+    def design_matrix(self, parameters):
         A = []
         misclosure_vector = []
         for coord_index in range(4):
@@ -269,37 +422,78 @@ class Intersection():
 
             A_row = []
             for p in p_e:
-                value = -self.evaluate(p, eops, self.parameters)
+                value = -self.evaluate(p, eops, parameters)
                 A_row.append(value)
 
             A.append(A_row)
-            misclosure_vector += [self.evaluate(eq, eops, self.parameters) - self.image[coord_index]]
+            misclosure_vector += [self.evaluate(eq, eops, parameters) - self.image[coord_index]]
 
         return np.matrix(A), misclosure_vector
 
-def main():
+def do_resection_test():
     # test data 
-    test_resection_image_points = [
+    test_resection_image_points = np.array([
         [106.399, 90.426], # 30
         [18.989,  93.365],  # 40
         [98.681, -62.769], # 50
         [9.278,  -92.926]   # 112
-    ] # mm (reduced to PP)
+    ]) # mm (reduced to PP)
 
-    test_resection_object_points = [
+    test_resection_object_points = np.array([
         [7350.27, 4382.54, 276.42],
         [6717.22, 4626.41, 280.05],
         [6905.26, 3279.84, 266.47],
         [6172.84, 3269.45, 248.10]
-    ] # m
+    ]) # m
 
-    #test_res = Resection(test_resection_image_points, test_resection_object_points, 152.150, 15)
+    test_res = Resection("test res", test_resection_image_points, test_resection_object_points, 152.150, 15)
 
-    # [x_left, y_left, x_right, y_right]
-    test_intersection_image_points = np.array([
-        [70.964, 4.907,	-15.581, -0.387], # 72
-        [-0.931, -7.284, -85.407, -8.351] # 127
-    ]) # mm
+def do_single_photo_resection():
+    # from lab 2
+    image_27 = np.array([
+        [-9.590463762012142, 96.21844317125414],
+        [-2.4130665595082577, -5.994692696706493],
+        [18.94331818098372, -81.81523920233901],
+        [90.37866498271781, -91.09240982867657],
+        [18.149336968374765, 109.57529999437965],
+        [44.59762997126615, 7.472924495358117],
+        [-7.65703502813932, -49.11171271008798],
+        [52.69132378762902, -93.1781834642561],
+    ])
+
+    image_28 = np.array([
+        [-105.46911858501092, 98.73604528901996],
+        [-95.08144734697845, -4.847626634342134],
+        [-72.54716548403219, -79.76433289820899],
+        [-1.3569472252226806, -86.94970555134802],
+        [-77.82635997556542, 113.4048797093696],
+        [-48.846121573185016, 10.130960551399694],
+        [-98.85497251911589, -48.0676549863933],
+        [-38.93560060084638, -90.07943042220953],
+    ])
+
+    control_indices = [2, 3, 4, 6] # what indices are control points
+    gcps = object_coords[control_indices]
+    image_coords_27 = image_27[control_indices]
+    image_coords_28 = image_28[control_indices]
+
+    res_27 = Resection("image 27 res", image_coords_27, gcps, 153.358, 15)
+    res_28 = Resection("image 28 res", image_coords_28, gcps, 153.358, 15)
+
+    do_resection_test()
+
+    return res_27, res_28
+
+def do_intersection_test():
+    test_inter_image_points_left = np.array([
+        [70.964, 4.907],  # 72
+        [-0.931, -7.284], # 127
+    ])
+
+    test_inter_image_points_right = np.array([
+        [-15.581, -0.387],  # 72
+         [-85.407, -8.351], # 127
+    ])
 
     # [Left, Right]
     test_intersection_eops = np.array([
@@ -311,9 +505,66 @@ def main():
         [-18.9049,	-15.7481], # k (dd)	
     ])
 
-    test_inter = Intersection(test_intersection_image_points, test_intersection_eops, 152.150)
-    test_inter.do_iterations(test_intersection_image_points[0])
-    test_inter.do_iterations(test_intersection_image_points[1])
+    test_inter = Intersection("test intersection", test_intersection_eops[:, 0], test_intersection_eops[:, 1], 152.150)
+    test_inter.do_iterations("test intersection 72", test_inter_image_points_left[0], test_inter_image_points_right[0])
+    test_inter.do_iterations("test intersection 127", test_inter_image_points_left[1], test_inter_image_points_right[1])
+
+def do_space_intersection(res_27, res_28):
+    # measurements
+    quinn_27 = [
+        [15334, 3241], [15539, 3240], [16007, 3241], [16250, 3241],
+        [15337, 3392], [15577, 3393], [16004, 3392], [16244, 3392],
+        [15338, 3582], [15577, 3582], [16004, 3583], [16244, 3582],
+        [15338, 3792], [15577, 3793], [16005, 3793], [16245, 3794]
+    ]
+
+    fre_27 = [
+        [15333, 3241], [15539, 3241], [16007, 3240], [16251, 3243],
+        [15338, 3392], [15578, 3392], [16003, 3392], [16242, 3392],
+        [15336, 3582], [15577, 3582], [16005, 3582], [16245, 3582],
+        [15337, 3791], [15579, 3790], [16005, 3791], [16244, 3792]
+    ]
+
+    quinn_28 = [
+        [7365, 2859], [7574, 2855], [8049, 2839], [8294, 2828],
+        [7373, 3017], [7615, 3008], [8048, 2996], [8290, 2988],
+        [7378, 3211], [7620, 3204], [8054, 3189], [8295, 3181],
+        [7383, 3427], [7625, 3419], [8058, 3406], [8301, 3399]
+    ]
+
+    fre_28 = [
+        [7366, 2861], [7575, 2856], [8049, 2839], [8295, 2826],
+        [7374, 3017], [7616, 3010], [8047, 2996], [8288, 2988],
+        [7377, 3211], [7620, 3203], [8053, 3190], [8296, 3182],
+        [7383, 3426], [7625, 3419], [8057, 3406], [8301, 3398]
+    ]
+
+    combined_27 = np.array([[[q[0], q[1]], [f[0], f[1]]] for q, f in zip(quinn_27, fre_27)])
+    combined_28 = np.array([[[q[0], q[1]], [f[0], f[1]]] for q, f in zip(quinn_28, fre_28)])
+
+    #images = lab2_calc.main()
+
+    #with open("test", "wb") as fp:
+    #    pickle.dump(images, fp)
+
+    with open("./test", "rb") as fp:
+        images = pickle.load(fp)
+
+    combined_27 = images[0].pool_data(combined_27)
+    combined_28 = images[1].pool_data(combined_28)
+
+    images[0].correct(combined_27)
+    images[1].correct(combined_28)
+
+    lab_inter = Intersection("lab intersection", res_27.deg_parameters, res_28.deg_parameters, 153.358)
+    lab_inter.do_iterations("lab intersection", combined_27[0], combined_28[0])
+    
+    do_intersection_test()
+
+def main():
+    res_27, res_28 = do_single_photo_resection()
+    do_space_intersection(res_27, res_28)
 
 if __name__ == '__main__':
     main()
+    doc.save("output.docx")

@@ -6,6 +6,68 @@ import copy
 
 from docx import Document
 
+object_coords = [
+    [-399.28, -679.72, 1090.96],
+    [109.70, -642.35, 1086.43],
+    [475.55, -538.18, 1090.50],
+    [517.62, -194.43, 1090.65],
+    [-466.39, -542.31, 1091.55],
+    [42.73, -412.19, 1090.82],
+    [321.09, -667.45, 1083.49],
+    [527.78, -375.72, 1092.00]
+]
+
+# 4 observations for each point
+data = np.array([
+    #   x1     y1     x2     y2     x3     y3
+    # image 27
+    [ 1347, 19285,  1347, 19285,  1347, 19284,  1347, 19285], # F1
+    [19161,  1470, 19175,  1484, 19160,  1469, 19162,  1470], # F2
+    [ 1345,  1471,  1358,  1473,  1345,  1471,  1346,  1472], # F3
+    [19163, 19283, 19163, 19283, 19167, 19282, 19163, 19283], # F4
+    [  843, 10379,   849, 10378,   842,  10378,  843, 10379], # F5
+    [19666, 10376, 19672, 10391, 19666, 10377, 19666, 10377], # F6
+    [10254,   966, 10267,   973, 10253,  966,  10254,   967], # F7
+    [10254, 19789, 10255, 19789, 10255, 19789, 10255, 19789], # F8
+    [ 1347, 19285,  1347, 19286,  1348, 19286,  1347, 19285], # 100
+    [19175,  1483, 19175,  1484, 19175,  1481, 19175,  1483], # 102
+    [ 1358,  1472,  1358,  1472,  1358,  1472,  1358,  1472], # 104
+    [19162, 19297, 19162, 19297, 19161, 19296, 19163, 19297], # 105
+    [  849,  10379,  849, 10378,   848,  10379,  849, 10379], # 200
+    [19672, 10391, 19672, 10391, 19672, 10390, 19672, 10391], # 201
+    [10267,   972, 10268,   973, 10268,   974, 10268,   973], # 202
+    [10254, 19795, 10254, 19796, 10254, 19796, 10255, 19795], # 203
+    [ 9447,  2295,  9458,  2293,  9448,  2294,  9447,  2296], # T1
+    [10053, 10883, 10056, 10883, 10048, 10880, 10052, 10883], # T2
+    [11843, 17255, 11851, 17259, 11848, 17245, 11844, 17251], # T3
+    [17844, 18028, 17852, 18033, 17862, 18039, 17841, 18027], # T4
+    [11782,  1172, 11781,  1172, 11781,  1172, 11781,  1174], # T5
+    [14000,  9752, 14008,  9749, 14007,  9748, 13998,  9754], # T6
+    # image 28
+    [ 9612, 14506,  9611, 14507,  9612, 14502,  9610, 14505], # F1
+    [14684, 18207, 14676, 18211, 14685, 18205, 14685, 18205], # F2
+    [ 1404,  2083,  1408,  2080,  1402,  2081,  1398,  2084], # F3
+    [ 2269, 10787,  2272, 10787,  2270, 10787,  2268, 10786], # F4
+    [ 4158, 17086,  4160, 17080,  4159, 17083,  4159, 17083], # F5
+    [10140, 17689, 10147, 17696, 10140, 17689, 10136, 17688], # F6
+    [ 3727,   851,  3726,   849,  3727,   852,  3727,   852], # F7
+    [ 6154,  9531,  6163,  9527,  6153,  9532,  6152,  9532], # F8
+    [ 1948, 14420,  1958, 14415,  1947, 14419,  1948, 14419], # 100
+    [ 6982, 17952,  6982, 17955,  6983, 17950,  6984, 17949], # 102
+    [ 9406,  9117,  9405,  9118,  9407,  9117,  9406,  9117], # 104
+    [18185, 10723, 18186, 10722, 18187, 10722, 18185, 10723], # 105
+    [ 9350, 19175,  9350, 19176,  9350, 19177,  9350, 19176], # 200
+    [17824, 18055, 17824, 18056, 17825, 18056, 17824, 18056], # 201
+    [ 9459,  2291,  9458,  2291,  9458,  2291,  9459,  2291], # 202
+    [17434,  1693, 17435,  1694, 17435,  1695, 17434,  1694], # 203
+    [ 1537,  9029,  1536,  9034,  1535,  9032,  1536,  9029], # T1
+    [10332, 10387, 10334, 10384, 10333, 10387, 10332, 10387], # T2
+    [ 1836, 19046,  1838, 19046,  1836, 19046,  1836, 19046], # T3
+    [10120, 17716, 10118, 17714, 10121, 17717, 10120, 17717], # T4
+    [ 1410,  2080,  1408,  2095,  1409,  2082,  1410,  2081], # T5
+    [ 9448,  1199,  9445,  1200,  9450,  1199,  9449,  1199]  # T6
+])
+
 '''
 def dist_3D(a, b):
     return math.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2 + (a[2] - b[2])**2)
@@ -32,7 +94,7 @@ def load_data(data, low, high):
         load.append(same)
     return load
 
-def right_hand(a, image_dim):
+def right_hand(a):
     for coords in a:
         x, y = coords
         #x = coords[0] - (image_dim[0]/2)
@@ -209,6 +271,20 @@ class Image:
         self.dim = [dim_x, dim_y]
         self.all_data = data
 
+    def pool_data(self, in_data):
+        for v in in_data:
+            right_hand(v)
+
+        values = []
+        table = []
+        for v in in_data:
+            m = mean(v)
+            s = std(v)
+            values.append(m)
+            table.append([m[0], m[1], s[0], s[1]])
+
+        return values
+        
     # combines all of the individual measurements
     def pool(self):
         self.data = {key: 0 for key in self.all_data.keys()}
@@ -216,7 +292,7 @@ class Image:
         # applying right-handed transformation
         for key in self.all_data:
             for v in self.all_data[key]:
-                right_hand(v, self.dim)
+                right_hand(v)
 
             array_to_word_table(array_3d_to_2d(self.all_data[key]), f"{key}_{self.tag}", int)
             print(f"{key}_{self.tag}\n{self.all_data[key]}")
@@ -288,7 +364,18 @@ class Image:
 
         return x_atm, y_atm
 
-    def apply_corrections(self, h, H):
+    def set_height(self, h, H):
+        self.h = h
+        self.H = H
+
+    def get_K(self):
+        h = self.h * 1E-3 # km
+        H = self.H * 1E-3 # km
+        K = ((2410 * H)/(H**2 - 6*H + 250)) - ((2410*h)/(h**2 - 6*h + 250)) * (h/H)
+        K = K * 1E-6
+        return K
+
+    def apply_corrections(self):
         self.rad_table = []
         self.dec_table = []
         self.atm_table = []
@@ -305,12 +392,9 @@ class Image:
         self.fiducial = []
         self.tie = []
         self.control = []
+        self.planar = []
 
-        h = h * 1E-3 # km
-        H = H * 1E-3 # km
-        K = ((2410 * H)/(H**2 - 6*H + 250)) - ((2410*h)/(h**2 - 6*h + 250)) * (h/H)
-        K = K * 1E-6
-        print(f"K: {K}")
+        K = self.get_K()
 
         for key in self.data:
             for coords in self.data[key]:
@@ -349,46 +433,26 @@ class Image:
                     self.control.append(final_coords)
                 elif key == "tie":
                     self.tie.append(final_coords)
+                elif key == "planar":
+                    self.planar.append(final_coords)
+
+    def correct(self, data):
+        affine_transformation(data, self.x_hat)
+        
+        K = self.get_K()
+
+        for coords in data:
+            self.principal_point_offest(coords)
+            self.radial_lens_correction(coords)
+            self.decentering_lens_correction(coords)
+            self.atmospheric_refraction_correction(coords, K)
 
 doc = Document()
 
-def main():
-    df = pd.read_excel('data.xlsx')
+def dist(a, b):
+    return math.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
 
-    data = []
-    for index, row in df.iterrows():
-        data.append(row.to_list())
-
-    og_27 = {
-        "fiducials": load_data(data, 0, 8),
-        "control": load_data(data, 16, 24),
-        "tie": load_data(data, 32, 38),
-    }
-
-    og_28 = {
-        "fiducials": load_data(data, 8, 16),
-        "control": load_data(data, 24, 32),
-        "tie": load_data(data, 38, 44),
-    }
-
-    camera = Camera()
-
-    images = [
-        Image(camera, "image_27", 20448, 20480, og_27),
-        Image(camera, "image_28", 20462, 20494, og_28)
-    ]
-
-
-    # part b
-
-    images[0].pool()
-    images[1].pool()
-
-    # get a value for pixel size
-
-    def dist(a, b):
-        return math.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
-
+def calculate_pixel_spacing(images):
     cali_dists = [
         299.816,
         299.825,
@@ -409,18 +473,9 @@ def main():
         pixel_spacing += pixel_spacing_estimate
     pixel_spacing = pixel_spacing / 4 # mm / px
     print(f"pixel_spacking: {pixel_spacing}")
+    return pixel_spacing
 
-    # part c
-
-    # fiducial marks from certificate
-    images[0].get_affine_transformation_parameters()
-    images[1].get_affine_transformation_parameters()
-
-    images[0].apply_transformation()
-    images[1].apply_transformation()
-
-    # part d
-
+def test_affine_transformation():
     test_data = [
         [-113.767,	-107.400],
         [-43.717,	-108.204],
@@ -462,21 +517,7 @@ def main():
     x_hat_test = get_affine_transformation_parameters(test_data, test_data_reseaux, "test")
     affine_transformation(data, x_hat_test)
 
-    # part e
-
-    print("\n\npart e")
-
-    object_coords = [
-        [-399.28, -679.72, 1090.96],
-        [109.70, -642.35, 1086.43],
-        [475.55, -538.18, 1090.50],
-        [517.62, -194.43, 1090.65],
-        [-466.39, -542.31, 1091.55],
-        [42.73, -412.19, 1090.82],
-        [321.09, -667.45, 1083.49],
-        [527.78, -375.72, 1092.00]
-    ]
-
+def get_height():
     avg_h = 0
     for coords in object_coords:
         x, y, z = coords
@@ -485,12 +526,54 @@ def main():
 
     flying_height = 751.4637599031875 # flying height from Lab 1
     H = flying_height + avg_h
+    return avg_h, H
 
-    print(avg_h)
-    print(H)
+def main():
+    og_27 = {
+        "fiducials": load_data(data, 0, 8),
+        "control": load_data(data, 16, 24),
+        "tie": load_data(data, 32, 38),
+    }
 
-    images[0].apply_corrections(avg_h, H)
-    images[1].apply_corrections(avg_h, H)
+    og_28 = {
+        "fiducials": load_data(data, 8, 16),
+        "control": load_data(data, 24, 32),
+        "tie": load_data(data, 38, 44),
+    }
+
+    camera = Camera()
+
+    images = [
+        Image(camera, "image_27", 20448, 20480, og_27),
+        Image(camera, "image_28", 20462, 20494, og_28)
+    ]
+
+    # part b
+
+    images[0].pool()
+    images[1].pool()
+
+    # part c
+
+    # fiducial marks from certificate
+    images[0].get_affine_transformation_parameters()
+    images[1].get_affine_transformation_parameters()
+
+    images[0].apply_transformation()
+    images[1].apply_transformation()
+
+    # part d
+    test_affine_transformation()
+
+    # part e
+    print("\n\npart e")
+
+    avg_h, H = get_height()
+    images[0].set_height(avg_h, H)
+    images[1].set_height(avg_h, H)
+
+    images[0].apply_corrections()
+    images[1].apply_corrections()
 
     array_to_word_table(concat_2d(images[0].rad_table, images[1].rad_table), f"radial_lens", float, decimals=4)
     array_to_word_table(concat_2d(images[0].dec_table, images[1].dec_table), f"decentering_lens", float, decimals=4)
@@ -519,7 +602,9 @@ def main():
 
     print(np.array(images[0].final))
 
-    doc.save("output.docx")
+    return images
+
 
 if __name__ == "__main__":
     main()
+    doc.save("output.docx")
