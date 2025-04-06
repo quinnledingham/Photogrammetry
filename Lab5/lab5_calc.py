@@ -6,6 +6,7 @@ import copy
 import sys
 import pandas as pd
 import pickle
+import matplotlib.pyplot as plt
 
 sys.path.insert(1, './../Lab2')
 import lab2_calc
@@ -78,13 +79,79 @@ def get_redundancy_numbers(A):
     print(f"Redundancy Numbers: {redundancy_numbers} Sum: {s}")
     return redundancy_numbers, s
 
+# X, Y, Z, W, P, K
+def get_deg_parameters(p):
+    deg_parameters = copy.copy(p)
+    deg_parameters[3] *= 180 / math.pi
+    deg_parameters[4] *= 180 / math.pi
+    deg_parameters[5] *= 180 / math.pi
+    return deg_parameters
+
+def output_solution(name, parameters, convert_to_degs, iterations, A, misclosure_vector):
+    if convert_to_degs:
+        parameters = get_deg_parameters(parameters)
+
+    print(f"Iterations: {iterations}")
+    print(f"Estimated Parameters: {np.array(parameters)}")
+    array_to_word_table(parameters, f"{name} Estimated Parameters")
+
+    residuals = np.array(misclosure_vector)
+    print(f"Residuals: {residuals}")
+    array_to_word_table(residuals, f"{name} residuals")
+
+    x_residuals = residuals[0::2]
+    y_residuals = residuals[1::2]  
+    array_to_word_table(x_residuals, f"{name} x_residuals")
+    array_to_word_table(y_residuals, f"{name} y_residuals")
+    rmsx = np.sqrt(np.mean(np.array(x_residuals)**2))
+    rmsy = np.sqrt(np.mean(np.array(y_residuals)**2))
+
+    print(f"RMS x: {rmsx}")
+    print(f"RMS y: {rmsy}")
+
+    r_numbers, r_sum = get_redundancy_numbers(A)
+    x_redundancy = r_numbers[0::2]
+    y_redundancy = r_numbers[1::2]
+    x_redundancy = np.append(x_redundancy, np.sum(x_redundancy))
+    y_redundancy = np.append(y_redundancy, np.sum(y_redundancy))
+    array_to_word_table(x_redundancy, f"{name} x redundancy")
+    array_to_word_table(y_redundancy, f"{name} y redundancy")
+
+    r = 8 - 6
+    sigma_obs = 15E-3  # mm
+    v = np.array(residuals)
+    P = 1/(sigma_obs**2) * np.eye(len(v))  # Weight matrix
+    v_squared_weighted_sum = v.T @ P @ v
+    variance_factor = np.sqrt(v_squared_weighted_sum / r)
+
+    other_quantites = []
+    other_quantites.append(rmsx)
+    other_quantites.append(rmsy)
+    other_quantites.append(r_sum)
+    other_quantites.append(variance_factor)
+    print(f"other: {other_quantites}")
+    array_to_word_table(other_quantites, f"{name} other quantities")
+
+    # correlation matrix and standard deviation
+    cov = sigma_obs**2 * np.linalg.inv(A.T @ A)
+    std_devs = np.sqrt(np.diag(cov))  # Standard deviations of parameters
+    corr_matrix = cov / np.outer(std_devs, std_devs)
+    print("Correlation Matrix of Estimated Parameters:\n", corr_matrix)
+
+    if convert_to_degs:
+        std_devs = get_deg_parameters(std_devs)
+
+    print(f"STD: {std_devs}")
+    array_to_word_table(std_devs, f"{name} STD")
+    array2d_to_word_table(corr_matrix.tolist(), f"{name} Correlation Matrix")
+
 class Resection():
     def __init__(self, name, image, object, focal_length, variance):
         self.name = name
         self.image = image
         self.object = object
         self.focal_length = focal_length
-        self.variance = variance
+        self.variance = variance * 1E3 # mm
 
         self.partial_derivatives = []
         self.partial_derivatives.append(self.get_partial(xij))
@@ -160,58 +227,16 @@ class Resection():
         iterations = 0
         while(1):
             A, misclosure_vector = self.design_matrix()
+            P = (1/self.variance**2) * np.eye(len(self.image) * 2)
 
-            corrections = -(np.linalg.inv(A.T @ A) @ A.T @ np.array(misclosure_vector))
+            corrections = -(np.linalg.inv(A.T @ P @ A) @ A.T @ P @ np.array(misclosure_vector))
             self.parameters = self.parameters + np.array(corrections).ravel()
 
             rel_corrections = np.abs(corrections / (np.abs(self.parameters) + 1e-10))
             iterations += 1
             if np.max(rel_corrections) < 1e-3: # if converged
-                print(f"Iterations: {iterations}")
-                print(f"Estimated Parameters: {np.array(self.parameters)}")
-                self.deg_parameters = self.get_deg_parameters(self.parameters)
-                array_to_word_table(self.deg_parameters, f"{self.name} Estimated Parameters")
-
                 A, misclosure_vector = self.design_matrix()
-                residuals = np.array(misclosure_vector)
-                print(f"Residuals: {residuals}")
-                array_to_word_table(residuals, f"{self.name} residuals")
-
-                x_residuals = residuals[0::2]
-                y_residuals = residuals[1::2]  
-                rmsx = np.sqrt(np.mean(np.array(x_residuals)**2))
-                rmsy = np.sqrt(np.mean(np.array(y_residuals)**2))
-
-                print(f"RMS x: {rmsx}")
-                print(f"RMS y: {rmsy}")
-
-                r_numbers, r_sum = get_redundancy_numbers(A)
-
-                r = 8 - 6
-                sigma_obs = 15E-3  # mm
-                v = np.array(residuals)
-                P = 1/(sigma_obs**2) * np.eye(len(v))  # Weight matrix
-                v_squared_weighted_sum = v.T @ P @ v
-                variance_factor = np.sqrt(v_squared_weighted_sum / r)
-
-                other_quantites = []
-                other_quantites.append(rmsx)
-                other_quantites.append(rmsy)
-                other_quantites.append(r_sum)
-                other_quantites.append(variance_factor)
-                print(f"other: {other_quantites}")
-                array_to_word_table(other_quantites, f"{self.name} other quantities")
-
-                # correlation matrix and standard deviation
-                cov = sigma_obs**2 * np.linalg.inv(A.T @ A)
-                std_devs = np.sqrt(np.diag(cov))  # Standard deviations of parameters
-                corr_matrix = cov / np.outer(std_devs, std_devs)
-                print("Correlation Matrix of Estimated Parameters:\n", corr_matrix)
-
-                print(f"STD: {self.get_deg_parameters(std_devs)}")
-                array_to_word_table(self.get_deg_parameters(std_devs), f"{self.name} STD")
-                array2d_to_word_table(corr_matrix.tolist(), f"{self.name} Correlation Matrix")
-
+                output_solution(self.name, self.parameters, true, iterations, A, misclosure_vector)
                 break
 
     def design_matrix(self):
@@ -343,19 +368,19 @@ class Intersection():
 
         return np.linalg.inv(A.T @ A) @ A.T @ b
 
-    def do_iterations(self, name, left, right):
+    def do_iterations(self, name, left, right, output):
         self.name = name
         self.image = [left[0], left[1], right[0], right[1]]
-        print(self.image)
-        array_to_word_table(self.image, f"{self.name} image points")
-
         parameters = self.approximate_parameters()
-        print(parameters)
-        array_to_word_table(parameters, f"{self.name} approximate parameters")
-        
         A, w = self.design_matrix(parameters)
-        print(A)
-        print(w)
+
+        if output:
+            print(self.image)
+            array_to_word_table(self.image, f"{self.name} image points")
+            print(parameters)
+            array_to_word_table(parameters, f"{self.name} approximate parameters")      
+            print(A)
+            print(w)
 
         iterations = 0
         while(1):
@@ -367,31 +392,9 @@ class Intersection():
             rel_corrections = np.abs(corrections / (np.abs(parameters) + 1e-10))
             iterations += 1
             if np.max(rel_corrections) < 1e-3: # if converged
-                print(f"Iterations: {iterations}")
-                print(f"Parameters: {np.array(parameters)}")
-                array_to_word_table(parameters, f"{self.name} estimated parameters")
-                
                 A, misclosure_vector = self.design_matrix(parameters)
-                residuals = np.array(misclosure_vector)
-                print(f"Residuals: {residuals}")
-                array_to_word_table(residuals, f"{self.name} residuals")
-
-                r_numbers, r_sum = get_redundancy_numbers(A)
-                np.append(r_numbers, r_sum)
-                array_to_word_table(r_numbers, f"{self.name} redundancy numbers")
-
-                sigma_obs = 15E-3  # mm
-
-                # correlation matrix and standard deviation
-                cov = sigma_obs**2 * np.linalg.inv(A.T @ A)
-                std_devs = np.sqrt(np.diag(cov))  # Standard deviations of parameters
-                corr_matrix = cov / np.outer(std_devs, std_devs)
-                print("Correlation Matrix of Estimated Parameters:\n", corr_matrix)
-
-                print(f"STD: {std_devs}")
-                array_to_word_table(std_devs, f"{self.name} STD")
-                array2d_to_word_table(corr_matrix.tolist(), f"{self.name} Correlation Matrix")
-
+                if output:
+                    output_solution(self.name, parameters, false, iterations, A, misclosure_vector)
                 break
 
         return parameters
@@ -477,8 +480,8 @@ def do_single_photo_resection():
     image_coords_27 = image_27[control_indices]
     image_coords_28 = image_28[control_indices]
 
-    res_27 = Resection("image 27 res", image_coords_27, gcps, 153.358, 15)
-    res_28 = Resection("image 28 res", image_coords_28, gcps, 153.358, 15)
+    res_27 = Resection("image 27 res", image_coords_27, gcps, 153.358, 5.95)
+    res_28 = Resection("image 28 res", image_coords_28, gcps, 153.358, 5.95)
 
     do_resection_test()
 
@@ -506,8 +509,8 @@ def do_intersection_test():
     ])
 
     test_inter = Intersection("test intersection", test_intersection_eops[:, 0], test_intersection_eops[:, 1], 152.150)
-    test_inter.do_iterations("test intersection 72", test_inter_image_points_left[0], test_inter_image_points_right[0])
-    test_inter.do_iterations("test intersection 127", test_inter_image_points_left[1], test_inter_image_points_right[1])
+    test_inter.do_iterations("test intersection 72", test_inter_image_points_left[0], test_inter_image_points_right[0], true)
+    test_inter.do_iterations("test intersection 127", test_inter_image_points_left[1], test_inter_image_points_right[1], true)
 
 def do_space_intersection(res_27, res_28):
     # measurements
@@ -556,9 +559,61 @@ def do_space_intersection(res_27, res_28):
     images[0].correct(combined_27)
     images[1].correct(combined_28)
 
+    array2d_to_word_table(combined_27, f"space intersection image 27 measurements")
+    array2d_to_word_table(combined_28, f"space intersection image 28 measurements")
+
     lab_inter = Intersection("lab intersection", res_27.deg_parameters, res_28.deg_parameters, 153.358)
-    lab_inter.do_iterations("lab intersection", combined_27[0], combined_28[0])
-    
+    object_coords = np.zeros((len(combined_27), 3))
+    for i in range(len(combined_27)):
+        object_coords[i] = lab_inter.do_iterations("lab intersection", combined_27[i], combined_28[i], false)
+
+    array2d_to_word_table(object_coords, f"space intersection object coords")
+
+    mean_height = np.mean(object_coords[:, 2])
+    residuals = object_coords[:, 2] - mean_height
+    RMSE = np.sqrt(np.mean(residuals**2))
+
+    stats = [ mean_height, RMSE ]
+    array_to_word_table(stats, f"space intersection stats")
+    array_to_word_table(residuals, f"space intersection object coords z residuals")
+
+    print(f"mean_height: + {mean_height}")
+    print(f"residuals: {residuals}")
+    print(f"RMSE: {RMSE}")
+
+    fig = plt.figure(figsize=(15, 5))
+
+    # Top-down view (X vs Y, same as before)
+    ax1 = fig.add_subplot(1, 3, 1)
+    ax1.scatter(object_coords[:, 0], object_coords[:, 1], c='blue', marker='o')
+    ax1.set_title('Top-Down View (X-Y)')
+    ax1.set_xlabel('X (m)')
+    ax1.set_ylabel('Y (m)')
+    ax1.axis('equal')
+    ax1.grid(True)
+
+    # Side view (X vs Z residual)
+    ax2 = fig.add_subplot(1, 3, 2)
+    ax2.scatter(object_coords[:, 0], residuals, c='green', marker='o')
+    ax2.axhline(0, color='gray', linestyle='--')
+    ax2.set_title('Side View (X vs Z Residual)')
+    ax2.set_xlabel('X (m)')
+    ax2.set_ylabel('Z Residual (m)')
+    ax2.grid(True)
+
+    # Side view (Y vs Z residual)
+    ax3 = fig.add_subplot(1, 3, 3)
+    ax3.scatter(object_coords[:, 1], residuals, c='red', marker='o')
+    ax3.axhline(0, color='gray', linestyle='--')
+    ax3.set_title('Side View (Y vs Z Residual)')
+    ax3.set_xlabel('Y (m)')
+    ax3.set_ylabel('Z Residual (m)')
+    ax3.grid(True)
+
+    plt.suptitle("Reconstructed Object Coordinates with Z Residuals")
+    plt.tight_layout()
+    plt.show()
+
     do_intersection_test()
 
 def main():
