@@ -24,39 +24,26 @@ def array_to_word_table(array, name, value_type, decimals=2):
 # create equations
 omega, phi, kappa = symbols('omega phi kappa')
 
-# Create rotation matrix elements
-'''
-m11 = (cos(phi)*cos(kappa))
-m12 = ((sin(omega)*sin(phi)*cos(kappa)) + (cos(omega)*sin(kappa)))
-m13 = (-(cos(omega)*sin(phi)*cos(kappa)) + (sin(omega)*sin(kappa)))
-
-m21 = (-cos(phi)*sin(kappa))
-m22 = (-(sin(omega)*sin(phi)*sin(kappa)) + (cos(omega)*cos(kappa)))
-m23 = ((cos(omega)*sin(phi)*sin(kappa)) + (sin(omega)*cos(kappa)))
-
-m31 = (sin(phi))
-m32 = (-sin(omega)*cos(phi))
-m33 = (cos(omega)*cos(phi))
-'''
-
-m11 = (cos(phi)*cos(kappa))
-m12 = ((sin(omega)*sin(phi)*cos(kappa)) - (cos(omega)*sin(kappa)))
-m13 = ((cos(omega)*sin(phi)*cos(kappa)) + (sin(omega)*sin(kappa)))
-
-m21 = (cos(phi)*sin(kappa))
-m22 = ((sin(omega)*sin(phi)*sin(kappa)) + (cos(omega)*cos(kappa)))
-m23 = ((cos(omega)*sin(phi)*sin(kappa)) - (sin(omega)*cos(kappa)))
-
-m31 = (-sin(phi))
-m32 = (sin(omega)*cos(phi))
-m33 = (cos(omega)*cos(phi))
-
-# Populate Matrix
-rotation_matrix = Matrix([
-    [m11, m12, m13],
-    [m21, m22, m23],
-    [m31, m32, m33],
+r1 = Matrix([
+    [1, 0, 0],
+    [0, cos(omega), -sin(omega)],
+    [0, sin(omega), cos(omega)],
 ])
+
+r2 = Matrix([
+    [cos(phi), 0, sin(phi)],
+    [0, 1, 0],
+    [-sin(phi), 0, cos(phi)],
+])
+
+r3 = Matrix([
+    [cos(kappa), -sin(kappa), 0],
+    [sin(kappa), cos(kappa), 0],
+    [0, 0, 1],
+])
+
+# Create rotation matrix elements
+rotation_matrix = r1 @ r2 @ r3
 
 class Relative_Orientation:
     bx, by, bz, l1, l2, r1, r2, f = symbols('bx by bz l1 l2 r1 r2 f')
@@ -158,9 +145,9 @@ class Relative_Orientation:
 
     def set_deg_parameters(self):
         self.deg_parameters = copy.copy(self.parameters)
-        self.deg_parameters[2] *= 180 / math.pi
-        self.deg_parameters[3] *= 180 / math.pi
-        self.deg_parameters[4] *= 180 / math.pi
+        self.deg_parameters[2] *= 180.0 / np.pi
+        self.deg_parameters[3] *= 180.0 / math.pi
+        self.deg_parameters[4] *= 180.0 / math.pi
 
     def plot(self):
         left = np.array(self.tie_left)

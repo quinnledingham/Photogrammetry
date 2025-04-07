@@ -87,7 +87,7 @@ def get_deg_parameters(p):
     deg_parameters[5] *= 180 / math.pi
     return deg_parameters
 
-def output_solution(name, parameters, convert_to_degs, iterations, A, misclosure_vector):
+def output_solution(name, parameters, convert_to_degs, iterations, A, misclosure_vector, sigma_obs):
     if convert_to_degs:
         parameters = get_deg_parameters(parameters)
 
@@ -117,12 +117,10 @@ def output_solution(name, parameters, convert_to_degs, iterations, A, misclosure
     array_to_word_table(x_redundancy, f"{name} x redundancy")
     array_to_word_table(y_redundancy, f"{name} y redundancy")
 
-    r = 8 - 6
-    sigma_obs = 15E-3  # mm
+    P = (1 / sigma_obs**2) * np.eye(len(residuals))  # Weight matrix
     v = np.array(residuals)
-    P = 1/(sigma_obs**2) * np.eye(len(v))  # Weight matrix
-    v_squared_weighted_sum = v.T @ P @ v
-    variance_factor = np.sqrt(v_squared_weighted_sum / r)
+    redundancy = len(v) - A.shape[1]  # degrees of freedom
+    variance_factor = (v.T @ P @ v) / redundancy
 
     other_quantites = []
     other_quantites.append(rmsx)
@@ -236,7 +234,7 @@ class Resection():
             iterations += 1
             if np.max(rel_corrections) < 1e-3: # if converged
                 A, misclosure_vector = self.design_matrix()
-                output_solution(self.name, self.parameters, true, iterations, A, misclosure_vector)
+                output_solution(self.name, self.parameters, true, iterations, A, misclosure_vector, self.variance)
                 break
 
     def design_matrix(self):
@@ -303,11 +301,12 @@ class Intersection():
         dz = p[5] * math.pi / 180
         return [p[0], p[1], p[2], dx, dy, dz]
 
-    def __init__(self, name, left_eops, right_eops, focal_length):
+    def __init__(self, name, left_eops, right_eops, focal_length, variance):
         self.name = name
         self.focal_length = focal_length
         self.left_eops = left_eops
         self.right_eops = right_eops
+        self.variance = variance * 1E3 # mm
 
         array_to_word_table(self.left_eops, f"{self.name} left eops")
         array_to_word_table(self.right_eops, f"{self.name} right eops")
@@ -394,7 +393,7 @@ class Intersection():
             if np.max(rel_corrections) < 1e-3: # if converged
                 A, misclosure_vector = self.design_matrix(parameters)
                 if output:
-                    output_solution(self.name, parameters, false, iterations, A, misclosure_vector)
+                    output_solution(self.name, parameters, false, iterations, A, misclosure_vector, self.variance)
                 break
 
         return parameters
@@ -449,7 +448,7 @@ def do_resection_test():
         [6172.84, 3269.45, 248.10]
     ]) # m
 
-    test_res = Resection("test res", test_resection_image_points, test_resection_object_points, 152.150, 15)
+    test_res = Resection("test res", test_resection_image_points, test_resection_object_points, 152.150, 15E-6)
 
 def do_single_photo_resection():
     # from lab 2
@@ -480,8 +479,8 @@ def do_single_photo_resection():
     image_coords_27 = image_27[control_indices]
     image_coords_28 = image_28[control_indices]
 
-    res_27 = Resection("image 27 res", image_coords_27, gcps, 153.358, 5.95)
-    res_28 = Resection("image 28 res", image_coords_28, gcps, 153.358, 5.95)
+    res_27 = Resection("image 27 res", image_coords_27, gcps, 153.358, 38.5E-6)
+    res_28 = Resection("image 28 res", image_coords_28, gcps, 153.358, 38.5E-6)
 
     do_resection_test()
 
@@ -508,7 +507,7 @@ def do_intersection_test():
         [-18.9049,	-15.7481], # k (dd)	
     ])
 
-    test_inter = Intersection("test intersection", test_intersection_eops[:, 0], test_intersection_eops[:, 1], 152.150)
+    test_inter = Intersection("test intersection", test_intersection_eops[:, 0], test_intersection_eops[:, 1], 152.150, 15E-6)
     test_inter.do_iterations("test intersection 72", test_inter_image_points_left[0], test_inter_image_points_right[0], true)
     test_inter.do_iterations("test intersection 127", test_inter_image_points_left[1], test_inter_image_points_right[1], true)
 
@@ -519,28 +518,28 @@ def do_space_intersection(res_27, res_28):
         [15337, 3392], [15577, 3393], [16004, 3392], [16244, 3392],
         [15338, 3582], [15577, 3582], [16004, 3583], [16244, 3582],
         [15338, 3792], [15577, 3793], [16005, 3793], [16245, 3794]
-    ]
+    ] # px
 
     fre_27 = [
         [15333, 3241], [15539, 3241], [16007, 3240], [16251, 3243],
         [15338, 3392], [15578, 3392], [16003, 3392], [16242, 3392],
         [15336, 3582], [15577, 3582], [16005, 3582], [16245, 3582],
         [15337, 3791], [15579, 3790], [16005, 3791], [16244, 3792]
-    ]
+    ] # px
 
     quinn_28 = [
         [7365, 2859], [7574, 2855], [8049, 2839], [8294, 2828],
         [7373, 3017], [7615, 3008], [8048, 2996], [8290, 2988],
         [7378, 3211], [7620, 3204], [8054, 3189], [8295, 3181],
         [7383, 3427], [7625, 3419], [8058, 3406], [8301, 3399]
-    ]
+    ] # px
 
     fre_28 = [
         [7366, 2861], [7575, 2856], [8049, 2839], [8295, 2826],
         [7374, 3017], [7616, 3010], [8047, 2996], [8288, 2988],
         [7377, 3211], [7620, 3203], [8053, 3190], [8296, 3182],
         [7383, 3426], [7625, 3419], [8057, 3406], [8301, 3398]
-    ]
+    ] # px
 
     combined_27 = np.array([[[q[0], q[1]], [f[0], f[1]]] for q, f in zip(quinn_27, fre_27)])
     combined_28 = np.array([[[q[0], q[1]], [f[0], f[1]]] for q, f in zip(quinn_28, fre_28)])
@@ -562,7 +561,7 @@ def do_space_intersection(res_27, res_28):
     array2d_to_word_table(combined_27, f"space intersection image 27 measurements")
     array2d_to_word_table(combined_28, f"space intersection image 28 measurements")
 
-    lab_inter = Intersection("lab intersection", res_27.deg_parameters, res_28.deg_parameters, 153.358)
+    lab_inter = Intersection("lab intersection", res_27.deg_parameters, res_28.deg_parameters, 153.358, 38.5E-6)
     object_coords = np.zeros((len(combined_27), 3))
     for i in range(len(combined_27)):
         object_coords[i] = lab_inter.do_iterations("lab intersection", combined_27[i], combined_28[i], false)
@@ -581,37 +580,20 @@ def do_space_intersection(res_27, res_28):
     print(f"residuals: {residuals}")
     print(f"RMSE: {RMSE}")
 
-    fig = plt.figure(figsize=(15, 5))
+    x_coords = object_coords[:, 0]
+    y_coords = object_coords[:, 1]
 
-    # Top-down view (X vs Y, same as before)
-    ax1 = fig.add_subplot(1, 3, 1)
-    ax1.scatter(object_coords[:, 0], object_coords[:, 1], c='blue', marker='o')
-    ax1.set_title('Top-Down View (X-Y)')
-    ax1.set_xlabel('X (m)')
-    ax1.set_ylabel('Y (m)')
-    ax1.axis('equal')
-    ax1.grid(True)
+    # We can treat the residuals as vectors in the z-direction (height residuals)
+    plt.figure(figsize=(10, 8))
+    plt.quiver(x_coords, y_coords, np.zeros_like(residuals), residuals, angles='xy', scale_units='xy', scale=0.1, color='red', width=0.005)
 
-    # Side view (X vs Z residual)
-    ax2 = fig.add_subplot(1, 3, 2)
-    ax2.scatter(object_coords[:, 0], residuals, c='green', marker='o')
-    ax2.axhline(0, color='gray', linestyle='--')
-    ax2.set_title('Side View (X vs Z Residual)')
-    ax2.set_xlabel('X (m)')
-    ax2.set_ylabel('Z Residual (m)')
-    ax2.grid(True)
+    # Add labels and title
+    plt.title('Quiver Plot of Height Residuals')
+    plt.xlabel('X (m)')
+    plt.ylabel('Y (m)')
 
-    # Side view (Y vs Z residual)
-    ax3 = fig.add_subplot(1, 3, 3)
-    ax3.scatter(object_coords[:, 1], residuals, c='red', marker='o')
-    ax3.axhline(0, color='gray', linestyle='--')
-    ax3.set_title('Side View (Y vs Z Residual)')
-    ax3.set_xlabel('Y (m)')
-    ax3.set_ylabel('Z Residual (m)')
-    ax3.grid(True)
-
-    plt.suptitle("Reconstructed Object Coordinates with Z Residuals")
-    plt.tight_layout()
+    # Show the plot
+    plt.grid(True)
     plt.show()
 
     do_intersection_test()

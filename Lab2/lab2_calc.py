@@ -472,7 +472,7 @@ def calculate_pixel_spacing(images):
         print(f"spacing: {pixel_spacing_estimate}")
         pixel_spacing += pixel_spacing_estimate
     pixel_spacing = pixel_spacing / 4 # mm / px
-    print(f"pixel_spacking: {pixel_spacing}")
+    print(f"pixel_spacing: {pixel_spacing}")
     return pixel_spacing
 
 def test_affine_transformation():

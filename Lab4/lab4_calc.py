@@ -50,9 +50,35 @@ rotation_matrix = Matrix([
     [m31, m32, m33],
 ])
 
+r1 = Matrix([
+    [1, 0, 0],
+    [0, cos(b_omega), sin(b_omega)],
+    [0, -sin(b_omega), cos(b_omega)],
+])
+
+r2 = Matrix([
+    [cos(b_phi), 0, -sin(b_phi)],
+    [0, 1, 0],
+    [sin(b_phi), 0, cos(b_phi)],
+])
+
+r3 = Matrix([
+    [cos(b_kappa), sin(b_kappa), 0],
+    [-sin(b_kappa), cos(b_kappa), 0],
+    [0, 0, 1],
+])
+
+# Create rotation matrix elements
+rotation_matrix_2 = r3 @ r2 @ r1
+
+print("R1")
+pprint(rotation_matrix)
+print("R2")
+pprint(rotation_matrix_2)
+
 class Absolute_Orientation:
     # absolute orientation equations
-    O = b_lambda * rotation_matrix * Matrix([mx, my, mz]) + Matrix([tx, ty, tz])
+    O = (b_lambda * rotation_matrix * Matrix([mx, my, mz])) + Matrix([tx, ty, tz])
     xO, yO, zO = O
 
     partial_derivatives = []
@@ -76,7 +102,7 @@ class Absolute_Orientation:
         array2d_to_word_table(self.object, f"{self.name} input object")
 
         # Getting parameters
-        self.inital_approx(np.array(self.object[0]), np.array(self.object[1]), np.array(self.model[0]), np.array(self.model[1]))
+        self.inital_approx(0, 1)
         self.set_deg_parameters()
         array_to_word_table(self.deg_parameters, f"{self.name} Initial Parameters")
         self.estimate_parameters()
@@ -102,7 +128,12 @@ class Absolute_Orientation:
         print(extracted_angles)
         array2d_to_word_table(extracted_angles, f"{self.name} extracted angles")
 
-    def inital_approx(self, o1, o2, m1, m2):
+    def inital_approx(self, i, j):
+        o1 = np.array(self.object[i])
+        o2 = np.array(self.object[j])
+        m1 = np.array(self.model[i])
+        m2 = np.array(self.model[j])
+
         ao = atan((o2[0] - o1[0])/(o2[1] - o1[1]))
         am = atan((m2[0] - m1[0])/(m2[1] - m1[1]))
 
@@ -126,7 +157,7 @@ class Absolute_Orientation:
 
         lambdao = do / dm
 
-        to = o1.T - (lambdao * (Mo @ o2.T))
+        to = o1 - (lambdao * (Mo @ m1))
 
         self.parameters = np.array([0.0, 0.0, kappao, lambdao, to[0], to[1], to[2]]) # omega, phi, kappa, lambda, tx, ty, tz
         print(f"Initial parameters: {self.parameters}")
@@ -317,7 +348,7 @@ def main():
         [42.73, -412.19, 1090.82],   # 201
         [321.09, -667.45, 1083.49],  # 202
         [527.78, -375.72, 1092.00]   # 203
-    ])
+    ]) # m
 
     all_model_points = np.array([
         [-9.5975,	96.3215,	-153.4711], # 100 0
@@ -328,7 +359,7 @@ def main():
         [43.8954,	7.3577, 	-150.9432], # 201 5
         [-7.5452,	-48.3790,	-151.1187], # 202 6
         [50.9073,	-90.0254,	-148.1656]  # 203 7
-    ])
+    ]) # mm
 
     array2d_to_word_table(object_coords, f"all object")
     array2d_to_word_table(all_model_points, f"all model")
@@ -378,7 +409,7 @@ def main():
         [ -0.9473,  -7.4078, -154.8060], # 127
         [  9.6380, -96.5329, -158.0535], # 112
         [100.4898, -63.9177, -154.9389], # 50
-    ]
+    ] # mm
 
     object_coordinates = [
         [7350.27,	4382.54,	276.42], # 30
@@ -387,7 +418,7 @@ def main():
         [6316.06,	3934.63,	283.03], # 127
         [6172.84,	3269.45,	248.10], # 112
         [6905.26,	3279.84,	266.47], # 50
-    ]
+    ] # m
 
     test_data = Absolute_Orientation("Test", model_coordinates, object_coordinates, [92, 5.0455, 2.1725], [0.4392, 1.508, 3.1575])
 
