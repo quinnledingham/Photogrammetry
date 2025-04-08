@@ -9,6 +9,8 @@ import pickle
 import matplotlib.pyplot as plt
 
 sys.path.insert(1, './../Lab2')
+sys.path.insert(1, './Lab2')
+
 import lab2_calc
 
 object_coords = np.array([
@@ -24,6 +26,17 @@ object_coords = np.array([
 
 # outputing results to a word document
 doc = Document()
+
+images = lab2_calc.main()
+
+#with open("test", "wb") as fp:
+#    pickle.dump(images, fp)
+
+#with open("./test", "rb") as fp:
+#    images = pickle.load(fp)
+
+images[0].rms *= np.sqrt(20)
+images[1].rms *= np.sqrt(25)
 
 # print a array to a word table
 def array_to_word_table(array, name, decimals=4):
@@ -123,6 +136,7 @@ def output_solution(name, parameters, convert_to_degs, iterations, A, misclosure
     variance_factor = (v.T @ P @ v) / redundancy
 
     other_quantites = []
+    other_quantites.append(sigma_obs)
     other_quantites.append(rmsx)
     other_quantites.append(rmsy)
     other_quantites.append(r_sum)
@@ -144,12 +158,12 @@ def output_solution(name, parameters, convert_to_degs, iterations, A, misclosure
     array2d_to_word_table(corr_matrix.tolist(), f"{name} Correlation Matrix")
 
 class Resection():
-    def __init__(self, name, image, object, focal_length, variance):
+    def __init__(self, name, image, object, focal_length, std):
         self.name = name
         self.image = image
         self.object = object
         self.focal_length = focal_length
-        self.variance = variance * 1E3 # mm
+        self.std = std # mm
 
         self.partial_derivatives = []
         self.partial_derivatives.append(self.get_partial(xij))
@@ -222,19 +236,29 @@ class Resection():
         self.parameters = [t_x, t_y, Z_C, 0, 0, theta_2D]
 
     def estimate_parameters(self):
+        tol_coords = 0.012
+        tol_tilt = 0.00056
+        tol_k = 0.00053
+
+        P = (1/self.std**2) * np.eye(len(self.image) * 2)
+
         iterations = 0
         while(1):
             A, misclosure_vector = self.design_matrix()
-            P = (1/self.variance**2) * np.eye(len(self.image) * 2)
 
             corrections = -(np.linalg.inv(A.T @ P @ A) @ A.T @ P @ np.array(misclosure_vector))
+            corrections = np.array(corrections).ravel()
             self.parameters = self.parameters + np.array(corrections).ravel()
+
+            coords_corr = corrections[0:3]
+            tilt_corr = corrections[3:5]
+            k_corr = corrections[5]
 
             rel_corrections = np.abs(corrections / (np.abs(self.parameters) + 1e-10))
             iterations += 1
-            if np.max(rel_corrections) < 1e-3: # if converged
+            if (np.max(np.abs(coords_corr)) < tol_coords and np.max(np.abs(tilt_corr)) < tol_tilt and np.abs(k_corr) < tol_k):
                 A, misclosure_vector = self.design_matrix()
-                output_solution(self.name, self.parameters, true, iterations, A, misclosure_vector, self.variance)
+                output_solution(self.name, self.parameters, true, iterations, A, misclosure_vector, self.std)
                 break
 
     def design_matrix(self):
@@ -275,7 +299,7 @@ class Resection():
             Yp: 0,
         })
         
-        return float(N(new_eq, 50))
+        return float(N(new_eq, 10))
         
 class Intersection():
     def evaluate(self, eq, eops, point):
@@ -301,12 +325,17 @@ class Intersection():
         dz = p[5] * math.pi / 180
         return [p[0], p[1], p[2], dx, dy, dz]
 
-    def __init__(self, name, left_eops, right_eops, focal_length, variance):
+    def __init__(self, name, left_eops, right_eops, focal_length, std):
         self.name = name
         self.focal_length = focal_length
         self.left_eops = left_eops
         self.right_eops = right_eops
-        self.variance = variance * 1E3 # mm
+        self.std = std # mm
+
+        left_c = np.array(left_eops[0:3])
+        right_c = np.array(right_eops[0:3])
+        baseline = np.linalg.norm(left_c - right_c)
+        array_to_word_table([baseline], f"{self.name} baseline")
 
         array_to_word_table(self.left_eops, f"{self.name} left eops")
         array_to_word_table(self.right_eops, f"{self.name} right eops")
@@ -393,7 +422,7 @@ class Intersection():
             if np.max(rel_corrections) < 1e-3: # if converged
                 A, misclosure_vector = self.design_matrix(parameters)
                 if output:
-                    output_solution(self.name, parameters, false, iterations, A, misclosure_vector, self.variance)
+                    output_solution(self.name, parameters, false, iterations, A, misclosure_vector, self.std)
                 break
 
         return parameters
@@ -433,6 +462,7 @@ class Intersection():
         return np.matrix(A), misclosure_vector
 
 def do_resection_test():
+    print("\n\nResection Validation\n")
     # test data 
     test_resection_image_points = np.array([
         [106.399, 90.426], # 30
@@ -448,9 +478,10 @@ def do_resection_test():
         [6172.84, 3269.45, 248.10]
     ]) # m
 
-    test_res = Resection("test res", test_resection_image_points, test_resection_object_points, 152.150, 15E-6)
+    test_res = Resection("test res", test_resection_image_points, test_resection_object_points, 152.150, 0.015)
 
 def do_single_photo_resection():
+    print("\n\nResection\n")
     # from lab 2
     image_27 = np.array([
         [-9.590463762012142, 96.21844317125414],
@@ -479,14 +510,15 @@ def do_single_photo_resection():
     image_coords_27 = image_27[control_indices]
     image_coords_28 = image_28[control_indices]
 
-    res_27 = Resection("image 27 res", image_coords_27, gcps, 153.358, 38.5E-6)
-    res_28 = Resection("image 28 res", image_coords_28, gcps, 153.358, 38.5E-6)
+    res_27 = Resection("image 27 res", image_coords_27, gcps, 153.358, images[0].rms)
+    res_28 = Resection("image 28 res", image_coords_28, gcps, 153.358, images[1].rms)
 
     do_resection_test()
 
     return res_27, res_28
 
 def do_intersection_test():
+    print("\n\nIntersection Validation\n")
     test_inter_image_points_left = np.array([
         [70.964, 4.907],  # 72
         [-0.931, -7.284], # 127
@@ -507,11 +539,12 @@ def do_intersection_test():
         [-18.9049,	-15.7481], # k (dd)	
     ])
 
-    test_inter = Intersection("test intersection", test_intersection_eops[:, 0], test_intersection_eops[:, 1], 152.150, 15E-6)
+    test_inter = Intersection("test intersection", test_intersection_eops[:, 0], test_intersection_eops[:, 1], 152.150, 0.015)
     test_inter.do_iterations("test intersection 72", test_inter_image_points_left[0], test_inter_image_points_right[0], true)
     test_inter.do_iterations("test intersection 127", test_inter_image_points_left[1], test_inter_image_points_right[1], true)
 
 def do_space_intersection(res_27, res_28):
+    print("\n\nIntersection\n")
     # measurements
     quinn_27 = [
         [15334, 3241], [15539, 3240], [16007, 3241], [16250, 3241],
@@ -544,14 +577,6 @@ def do_space_intersection(res_27, res_28):
     combined_27 = np.array([[[q[0], q[1]], [f[0], f[1]]] for q, f in zip(quinn_27, fre_27)])
     combined_28 = np.array([[[q[0], q[1]], [f[0], f[1]]] for q, f in zip(quinn_28, fre_28)])
 
-    #images = lab2_calc.main()
-
-    #with open("test", "wb") as fp:
-    #    pickle.dump(images, fp)
-
-    with open("./test", "rb") as fp:
-        images = pickle.load(fp)
-
     combined_27 = images[0].pool_data(combined_27)
     combined_28 = images[1].pool_data(combined_28)
 
@@ -561,7 +586,7 @@ def do_space_intersection(res_27, res_28):
     array2d_to_word_table(combined_27, f"space intersection image 27 measurements")
     array2d_to_word_table(combined_28, f"space intersection image 28 measurements")
 
-    lab_inter = Intersection("lab intersection", res_27.deg_parameters, res_28.deg_parameters, 153.358, 38.5E-6)
+    lab_inter = Intersection("lab intersection", res_27.deg_parameters, res_28.deg_parameters, 153.358, np.sqrt(images[0].rms**2 + images[1].rms**2))
     object_coords = np.zeros((len(combined_27), 3))
     for i in range(len(combined_27)):
         object_coords[i] = lab_inter.do_iterations("lab intersection", combined_27[i], combined_28[i], false)

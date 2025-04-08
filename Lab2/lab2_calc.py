@@ -233,11 +233,12 @@ def get_affine_transformation_parameters(data, t_data, tag):
     #residual_plot(t_data, r)
 
     r = np.array(r)
-    print(f"RMS x: {RMS(r[:, 0])}, y: {RMS(r[:, 1])}")
+    rms = [RMS(r[:, 0]), RMS(r[:, 1])]
+    print(f"RMS x: {rms[0]}, y: {rms[1]}")
 
     array_to_word_table(r, f"residual_{tag}", float, decimals=6)
 
-    return x_hat
+    return x_hat, np.sqrt(rms[0]**2 + rms[1]**2)
 
 class Camera:
     def __init__(self):
@@ -317,7 +318,7 @@ class Image:
             array_to_word_table(table, f"mean__std_{key}_{self.tag}", float)
 
     def get_affine_transformation_parameters(self):
-        self.x_hat = get_affine_transformation_parameters(self.data['fiducials'], self.camera.fiducial_marks, self.tag)
+        self.x_hat, self.rms = get_affine_transformation_parameters(self.data['fiducials'], self.camera.fiducial_marks, self.tag)
 
     def apply_transformation(self):
         for key in self.data:
@@ -514,7 +515,7 @@ def test_affine_transformation():
         [-110,	110],
     ]
     print("\nlecture data:")
-    x_hat_test = get_affine_transformation_parameters(test_data, test_data_reseaux, "test")
+    x_hat_test, r = get_affine_transformation_parameters(test_data, test_data_reseaux, "test")
     affine_transformation(data, x_hat_test)
 
 def get_height():
